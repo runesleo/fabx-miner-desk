@@ -1,0 +1,14 @@
+.DS_Store
+.env*
+*.session
+*.session-journal
+*.pem
+*.key
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.live-baseline.mjs
+.wrangler/
+coverage/
+*.log
