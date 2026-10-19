@@ -6,7 +6,7 @@
 
 A read-only dashboard for FabX miners on X Layer: compare build-versus-buy costs, measure rig output, and explore payback scenarios.
 
-**[Open the live app](https://fabx-miner-desk.pages.dev/)** · [Product scope](PRODUCT.md) · [Changelog](CHANGELOG.md)
+**[Open the live app](https://fabx-miner-desk.pages.dev/)** · [Mirror on FabX DeWeb](https://r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech/) · [Product scope](PRODUCT.md) · [Changelog](CHANGELOG.md)
 
 Built as an entry in the **X Layer TapeOut Developer Acceleration Program**.
 

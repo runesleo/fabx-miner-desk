@@ -6,7 +6,7 @@
 
 先看清每份日产能要花多少，再考虑入场：在 X Layer 上比较 FabX 建机与买机成本、查看地址矿机产出、试算回本的只读工具。
 
-**[打开在线工具](https://fabx-miner-desk.pages.dev/)** · [产品范围](PRODUCT.md) · [版本记录](CHANGELOG.md)
+**[打开在线工具](https://fabx-miner-desk.pages.dev/)** · [FabX DeWeb 镜像](https://r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech/) · [产品范围](PRODUCT.md) · [版本记录](CHANGELOG.md)
 
 本项目是 **X Layer TapeOut 开发者加速计划参赛作品**。
 
