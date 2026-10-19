@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Privacy-friendly usage stats for the hosted copy: `track.mjs` sends one page-load count to a Cloudflare Pages Function (`/api/hit`, D1) with day, page, language, referrer host and a random browser ID; no IP, user agent, wallet address, full URL or cookie. Skipped under Do Not Track or without local storage; silently inactive on DeWeb and local servers.
+- Rig-stop alert beta: an optional Telegram sign-up below the asset card (`/api/alerts`) stores the looked-up address and Telegram username so rig stops or abnormal output drops can be reported. Free during the beta; a paid plan is planned.
+- `schema.sql` D1 migration, `wrangler.toml` Pages config, `_routes.json` limiting functions to `/api/*`, and offline tests with a fake D1.
+
+### Changed
+
+- Privacy documentation, product constraints and method notes now describe the two optional functions instead of "no backend"; the dashboard remains read-only and never asks to sign.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added

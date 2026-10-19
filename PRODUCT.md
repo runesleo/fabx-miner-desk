@@ -9,6 +9,7 @@ FabX Miner Desk helps people inspect FabX mining economics on X Layer through a 
 - Explore symmetric price scenarios and network-growth assumptions without executing a trade.
 - Learn the basic roles of FabX, FAB, NAND, and LATCH, with links to official pages.
 - Optionally enter a custom harvest rule; it starts empty and disabled and stays in browser storage.
+- Optionally join the free rig-stop alert beta with a Telegram username after looking up an address (paid alerts planned; the dashboard stays free).
 
 ## Product constraints
 
@@ -17,7 +18,7 @@ FabX Miner Desk helps people inspect FabX mining economics on X Layer through a 
 3. Honest missing data: unavailable measurements remain unknown. Partial listing enumeration must not produce a ranking; incomplete wallet discovery must be labeled.
 4. Consistent measurements: wallet assets and listing comparisons use the same approximately ten-minute live-reward method with claim, state, and rate checks.
 5. Limited scope: official FabX rig listings only; no claim of comprehensive market coverage, investment recommendations, or future returns.
-6. Static distribution: no application backend or credentials. Providers still receive read requests, and browser storage retains preferences and cached observations.
+6. Static distribution with two minimal functions: the page is static and chain/price reads never pass through our server. The hosted Cloudflare Pages copy adds `/api/hit` (anonymous page-load counts: day, page, language, referrer host, random browser ID; no IP, user agent, address or URL; skipped under Do Not Track) and `/api/alerts` (address + Telegram username, only on explicit submit). Both are optional; the DeWeb copy and local servers run without them. Still read-only: no signing, no wallet connection required, no credentials. Providers still receive read requests, and browser storage retains preferences and cached observations.
 
 ## Acceptance criteria
 
@@ -25,6 +26,6 @@ FabX Miner Desk helps people inspect FabX mining economics on X Layer through a 
 - Existing holders can paste an address or use the clearly labeled public example.
 - English and Chinese interfaces remain usable on mobile.
 - Prices, measured output, static estimates, and assumptions are distinguishable.
-- Offline `node --test` checks calculations, failure paths, coverage, caching, and UI behavior using fake providers.
+- Offline `node --test` checks calculations, failure paths, coverage, caching, UI behavior, and both functions (validation, path whitelist, size caps, no IP/user-agent storage) using fake providers and a fake D1.
 
 See [README.md](README.md) for contract addresses, calculations, setup, safety, and limitations. Historical mobile captures in [docs/screenshots/](docs/screenshots/) illustrate past observations rather than current availability; see the README verification section for their scope.

@@ -100,6 +100,10 @@
   .official-links a { display: block; padding: 10px 12px; border-radius: 10px; background: var(--soft); color: var(--accent); font-size: 14px; text-decoration: none; }
   .basics-number { margin: 12px 0; font-size: 14px; }
   .basics-number small { display: block; font-size: 12px; color: var(--muted); }
+  .alert-box { background: var(--soft); border-radius: 12px; padding: 2px 14px 10px; margin-top: 14px; }
+  .alert-box h3 { margin-top: 10px; }
+  .alert-box input { background: var(--card); }
+  .alert-box .asset-note { margin: 4px 0 10px; }
   @media (max-width: 440px) {
     main { padding-top: 16px; gap: 8px; }
     #entryCompare { padding: 16px; }
@@ -193,6 +197,15 @@
     <p class="answer" style="font-size:18px" id="mineOut" hidden></p>
     <p class="sub" id="mineSub" hidden></p>
     <div class="asset-card" id="assetCard" hidden></div>
+    <div class="alert-box" id="alertBox" hidden>
+      <h3 id="alertTitle"></h3>
+      <p class="asset-note" id="alertBody"></p>
+      <div class="row">
+        <input id="alertTg" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="33">
+        <button class="link" id="alertGo"></button>
+      </div>
+      <p class="small" id="alertMsg" role="status" style="margin:8px 0 0"></p>
+    </div>
     <p class="err" id="werr" hidden></p>
   </details>
 
@@ -330,6 +343,13 @@ const T = {
     futureAssumed: '全网权重增速未测，按 0 增长。',
     futureBasis: '按上述增速逐日稀释产出，FAB 价格固定为现价的 0.5× / 1× / 2×；是未来挖出 FAB 的估值，不是矿机转售价或收益保证。',
     other: '换个地址',
+    alertTitle: '矿机停产提醒 · 内测免费',
+    alertBody: '这个地址的任一矿机停止产出或产出异常下降时，我们会通过 Telegram 通知你。内测期间免费，之后计划推出付费版。留下 Telegram 用户名，会把它和这个地址一起存到我们的服务器；除此之外本站仍然只读，不会要求连接钱包或签名。',
+    alertTgPh: '@Telegram 用户名', alertGo: '开启提醒', alertSending: '提交中…',
+    alertOk: '已登记。矿机停产或产出异常时会通过 Telegram 通知你。',
+    alertBadTg: 'Telegram 用户名格式不对：5–32 位字母、数字或下划线。',
+    alertLimit: '这个 Telegram 用户名登记的地址已达上限。',
+    alertFail: '提交失败，请稍后重试。镜像站点可能不支持提醒登记。',
     ruleSays: (s) => `按你的收割规则，今天领出来的 FAB 卖 ${s}。`, ruleHold: '按你的收割规则，今天只领不卖。',
     since: (parts, ago) => `距你上次来（${ago}）：${parts}`, ago: (h) => h < 48 ? `${Math.round(h)} 小时前` : `${Math.round(h / 24)} 天前`,
     sFab: (x) => `FAB ${x >= 0 ? '涨' : '跌'} ${Math.abs(x).toFixed(1)}%`, sNet: (x) => `全网算力 ${x >= 0 ? '+' : ''}${x.toFixed(1)}%`,
@@ -340,7 +360,8 @@ const T = {
     ruleRow: '现价 ≥ 中位价', ruleSell: '时卖',
     methodH: '计算口径',
     method: [
-      '当前价格与全网数据从 X Layer 链上和公开行情现读，没有服务器。24h 行情和 NAND 报价在后台读取；最近成功数据只缓存在此浏览器，回退时标明缓存年龄。',
+      '当前价格与全网数据从 X Layer 链上和公开行情直接读取，不经过本站服务器。24h 行情和 NAND 报价在后台读取；最近成功数据只缓存在此浏览器，回退时标明缓存年龄。',
+      '使用统计：每次打开页面记一次匿名计数（随机浏览器编号、页面、语言、来源网站域名），不记录 IP、浏览器标识或钱包地址；开启「请勿追踪」(Do Not Track) 时不统计。',
       '回本天数 = NAND 美元价 ÷ 1 个 NAND 每天挖到的美元，按边际算（多烧的这份也会增加全网算力），不含后来者稀释。静态年化 = 365 ÷ 回本天数。',
       'FAB 价格：直接读取 FAB/BEM Uniswap v4 池 Slot0 状态 × BEM 美元价；有成交日志时与最近成交价交叉核对。24 小时中位价取每笔成交后的池子价格。',
       'NAND 价：直接读取 FabX 市场全部卖单，取 NAND 最低有效卖价；显示同价可用数量和观测区块年龄。这是边际重置成本参考，整仓不保证能按此价格成交。',
@@ -449,6 +470,13 @@ const T = {
     futureAssumed: 'Network growth not measured; assuming 0 growth.',
     futureBasis: 'Output is diluted daily at this growth rate, with FAB held at 0.5× / 1× / 2× today’s price. Values cover future FAB output, not rig resale or guaranteed returns.',
     other: 'Try another address',
+    alertTitle: 'Rig-stop alerts · free beta',
+    alertBody: 'We will message you on Telegram if a rig of this address stops producing or its output drops abnormally. Free during the beta; a paid plan is planned later. Leaving your Telegram username stores it with this address on our server. Otherwise this site stays read-only and never asks you to connect a wallet or sign.',
+    alertTgPh: '@telegram_username', alertGo: 'Turn on alerts', alertSending: 'Submitting…',
+    alertOk: 'Signed up. We will notify you on Telegram if a rig stops or its output drops abnormally.',
+    alertBadTg: 'Invalid Telegram username: 5–32 letters, digits or underscores.',
+    alertLimit: 'This Telegram username has reached the address limit.',
+    alertFail: 'Could not submit; please retry later. Mirror copies may not support alert sign-up.',
     ruleSays: (s) => `Your harvest rule: sell ${s} of today's claimed FAB.`, ruleHold: 'Your harvest rule: claim, sell nothing today.',
     since: (parts, ago) => `Since your last visit (${ago}): ${parts}`, ago: (h) => h < 48 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)} days ago`,
     sFab: (x) => `FAB ${x >= 0 ? 'up' : 'down'} ${Math.abs(x).toFixed(1)}%`, sNet: (x) => `network hashpower ${x >= 0 ? '+' : ''}${x.toFixed(1)}%`,
@@ -459,7 +487,8 @@ const T = {
     ruleRow: 'Spot ≥ median ×', ruleSell: 'sell',
     methodH: 'Method',
     method: [
-      'Current prices and network data are read from X Layer and public price APIs. No backend. The 24h history and NAND quote load in the background; last good values are cached only in this browser and labelled with their age when used.',
+      'Current prices and network data are read directly from X Layer and public price APIs, not through our server. The 24h history and NAND quote load in the background; last good values are cached only in this browser and labelled with their age when used.',
+      'Usage stats: one anonymous count per page load (random browser id, page, language, referring site name). No IP, user agent or wallet address is recorded; nothing is sent when Do Not Track is on.',
       'Payback = NAND in USD ÷ USD one NAND mines per day, at the margin (your burn adds to network hashpower too), without dilution from later miners. Static APR = 365 ÷ payback days.',
       'FAB price: live FAB/BEM Uniswap v4 pool Slot0 state × BEM in USD, cross-checked against the last swap when logs are available. The 24h median is over post-trade pool prices.',
       'NAND price: the lowest live NAND ask in the complete on-chain FabX ask book, with quantity at that price and the observation block age. A marginal replacement-cost reference, not an executable price for the whole portfolio.',
@@ -501,8 +530,9 @@ function applyStatic() {
   document.title = L.appTitle;
   document.querySelector?.('meta[name="description"]')?.setAttribute('content', L.description);
   $('appTitle').textContent = L.appTitle;
-  for (const id of ['lang', 'todayEyebrow', 'investQ', 'mineQ', 'mine', 'go', 'readOnly', 'example', 'moreLabel', 'primer', 'netH', 'nandH', 'apply', 'ruleH', 'ruleOnL', 'ruleAdd', 'methodH', 'footer', 'manualNand', 'entryTitle', 'entryRetry', 'entryScope', 'entryCosts', 'entryTop', 'entryMethodTitle', 'entryMethod', 'entryDetailTitle', 'riskDetailTitle', 'riskText', 'basicsTitle', 'basicsContent', 'basicsSource', 'firstStepsTitle', 'firstStepsNote', 'officialHome', 'officialRigs', 'officialNand', 'officialVerified', 'already']) $(id).textContent = L[id];
-  $('addr').placeholder = L.addrPh; $('nand').placeholder = L.nandPh;
+  for (const id of ['alertTitle', 'alertBody', 'alertGo', 'lang', 'todayEyebrow', 'investQ', 'mineQ', 'mine', 'go', 'readOnly', 'example', 'moreLabel', 'primer', 'netH', 'nandH', 'apply', 'ruleH', 'ruleOnL', 'ruleAdd', 'methodH', 'footer', 'manualNand', 'entryTitle', 'entryRetry', 'entryScope', 'entryCosts', 'entryTop', 'entryMethodTitle', 'entryMethod', 'entryDetailTitle', 'riskDetailTitle', 'riskText', 'basicsTitle', 'basicsContent', 'basicsSource', 'firstStepsTitle', 'firstStepsNote', 'officialHome', 'officialRigs', 'officialNand', 'officialVerified', 'already']) $(id).textContent = L[id];
+  $('addr').placeholder = L.addrPh; $('nand').placeholder = L.nandPh; $('alertTg').placeholder = L.alertTgPh;
+  renderAlertMsg();
   $('method').innerHTML = L.method.map((m) => `<li>${m}</li>`).join('');
   $('budgets').innerHTML = BUDGETS.map((b) => `<button class="chip" data-b="${b}" aria-pressed="${b === budget}">$${b.toLocaleString()}</button>`).join('');
   $('budgets').querySelectorAll('.chip').forEach((c) => { c.onclick = () => { budget = Number(c.dataset.b); store.set('fmd.budget', budget); applyStatic(); renderInvest(); }; });
@@ -581,7 +611,7 @@ function render() {
     $('answer').textContent = loadError ? L.failed(errorText(loadError)) : L.loading;
     $('answerSub').textContent = ''; $('dataStatus').textContent = '';
     $('invest').textContent = loadError ? '—' : L.loading; $('investSub').textContent = '';
-    $('net').textContent = ''; show('manualNand', false); show('assetCard', false);
+    $('net').textContent = ''; show('manualNand', false); show('assetCard', false); show('alertBox', false);
     return;
   }
   const { prices: p, network: n, decision: d } = snap;
@@ -694,7 +724,7 @@ function pendingSummary(w) {
 }
 
 function renderMine() {
-  if (!walletRes || !snap) { show('assetCard', false); return; }
+  if (!walletRes || !snap) { show('assetCard', false); show('alertBox', false); return; }
   const w = walletRes, partial = w.discovery?.complete === false;
   show('mineIdle', false); show('mineOut', true); show('mineSub', true);
   show('assetCard', !!w.circuits);
@@ -705,11 +735,12 @@ function renderMine() {
     $('mineSub').innerHTML = esc(w.loading ? L.measuring : L.mineSub(pendingSummary(w), f(card.fabPerDay == null ? null : w.networkSharePct, 3))) + ` · <button class="link" id="other">${L.other}</button>`;
     renderAssetCard(card);
   }
+  show('alertBox', !!w.circuits && !w.loading && !!walletAddr && walletAddr !== CFG.exampleWallet.toLowerCase());
   if (partial) {
     $('mineSub').innerHTML = `<span class="warn">${esc(L.discoveryPartial)}</span> <button class="link" id="retryMine">${L.retryMine}</button> · ` + $('mineSub').innerHTML;
     $('retryMine').onclick = () => lookup(walletAddr);
   }
-  $('other').onclick = () => { if (location.pathname === '/rigs') history.pushState(null, '', '/'); walletRequest++; walletController?.abort(); walletRes = null; walletAddr = null; $('mine').disabled = false; $('mine').textContent = L.mine; show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false); show('werr', false); show('pasteRow', true); $('addr').value = ''; $('addr').focus(); };
+  $('other').onclick = () => { if (location.pathname === '/rigs') history.pushState(null, '', '/'); walletRequest++; walletController?.abort(); walletRes = null; walletAddr = null; $('mine').disabled = false; $('mine').textContent = L.mine; show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false); show('werr', false); show('pasteRow', true); $('addr').value = ''; $('addr').focus(); };
 }
 
 // One historical read per snapshot head, independent of wallet lookup and language changes.
@@ -872,7 +903,7 @@ async function load() {
     if (request !== loadRequest) return;
     showSince(fresh);
     const refreshAddress = walletRes ? walletAddr : null;
-    if (refreshAddress) { walletRes = null; show('mineOut', false); show('mineSub', false); show('assetCard', false); }
+    if (refreshAddress) { walletRes = null; show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false); }
     snap = fresh; render();
     startOptional(request, options, false, Math.max(1, expiresAt - Date.now()));
     if (refreshAddress) lookup(refreshAddress);
@@ -910,10 +941,10 @@ async function lookup(a, timeoutMs = CFG.loadTimeoutMs) {
   const controller = new AbortController();
   walletController = controller;
   walletExpiresAt = Date.now() + timeoutMs;
-  walletRes = null; walletAddr = null;
+  walletRes = null; walletAddr = null; alertState = null; renderAlertMsg();
   rigsExpanded = false;
   if ($('allRigs')) $('allRigs').open = false;
-  show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false);
+  show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false);
   if (a.toLowerCase() !== CFG.exampleWallet) store.set('fmd.addr', a);
   $('mine').disabled = true; $('mine').textContent = L.scanning;
   try {
@@ -951,6 +982,28 @@ async function lookup(a, timeoutMs = CFG.loadTimeoutMs) {
   } }
   finally { if (request === walletRequest) { $('mine').disabled = false; $('mine').textContent = L.mine; } }
 }
+
+// Alert beta sign-up: sends the looked-up address and a Telegram username only after an explicit click.
+let alertState = null, alertRequest = 0;
+function renderAlertMsg() { $('alertMsg').textContent = alertState ? L[alertState] : ''; }
+const setAlert = (key) => { alertState = key; renderAlertMsg(); };
+$('alertGo').onclick = async () => {
+  const telegram = $('alertTg').value.trim(), address = walletAddr;
+  if (!/^@?[A-Za-z0-9_]{5,32}$/.test(telegram)) return setAlert('alertBadTg');
+  if (!address || !isAddress(address)) return setAlert('alertFail');
+  const request = ++alertRequest;
+  setAlert('alertSending'); $('alertGo').disabled = true;
+  let result = 'alertFail';
+  try {
+    const res = await deadline(signal => fetch('/api/alerts', { method: 'POST', signal, credentials: 'omit',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address, telegram, lang }) }), CFG.loadTimeoutMs);
+    const body = await res.json().catch(() => null);
+    result = res.ok && body?.ok === true ? 'alertOk' : res.status === 429 ? 'alertLimit' : res.status === 400 && body?.error === 'bad_telegram' ? 'alertBadTg' : 'alertFail';
+  } catch {}
+  if (request !== alertRequest) return;
+  $('alertGo').disabled = false;
+  if (address === walletAddr) setAlert(result);
+};
 
 // One button: use the wallet extension to read the address if there is one (read-only), else ask for a paste.
 $('mine').onclick = async () => {
@@ -992,5 +1045,6 @@ if (linkedAddress && /^(?:\/|\/rigs\/?)$/.test(location.pathname)) {
   lookup(linkedAddress);
 }
 </script>
+<script type="module" src="/track.mjs"></script>
 </body>
 </html>

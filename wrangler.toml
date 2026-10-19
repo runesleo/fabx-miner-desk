@@ -1,0 +1,8 @@
+name = "fabx-miner-desk"
+pages_build_output_dir = "."
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fabx-miner-desk"
+database_id = "10e36c9e-f728-4c52-ba2c-15502f9355d2"

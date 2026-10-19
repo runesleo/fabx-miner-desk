@@ -915,3 +915,65 @@ test('example asset card keeps address, ownership disclaimer and snapshot contex
   await h.context.ui.lookup('0x2222222222222222222222222222222222222222');
   assert.doesNotMatch(h.get('assetCard').innerHTML, /公开示例地址、非作者持仓/);
 });
+
+test('rig-stop alert box appears only after a real address lookup, in both languages, and posts the address in the body', async () => {
+  const requests = [];
+  const h = harness({
+    wallet: async () => ({ circuits: 1, rigs: [] }),
+    fetch: async (url, init) => { requests.push({ url, init }); return { ok: true, status: 200, json: async () => ({ ok: true }) }; },
+  });
+  await flush();
+  await h.context.ui.lookup(h.context.CFG.exampleWallet);
+  assert.equal(h.get('alertBox').hidden, true, 'never offered for the public example address');
+  const address = '0x2222222222222222222222222222222222222222';
+  await h.context.ui.lookup(address);
+  assert.equal(h.get('alertBox').hidden, false);
+  assert.match(h.get('alertTitle').textContent, /Rig-stop alerts · free beta/);
+  assert.match(h.get('alertBody').textContent, /Telegram.*stops producing.*paid plan.*stores it with this address on our server.*never asks you to connect a wallet or sign/);
+  h.get('alertTg').value = 'ab';
+  await h.get('alertGo').onclick();
+  assert.match(h.get('alertMsg').textContent, /Invalid Telegram username/);
+  assert.equal(requests.length, 0);
+  h.get('alertTg').value = '@leo_miner';
+  await h.get('alertGo').onclick();
+  await flush();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/alerts');
+  assert.deepEqual(JSON.parse(requests[0].init.body), { address, telegram: '@leo_miner', lang: 'en' });
+  assert.match(h.get('alertMsg').textContent, /Signed up/);
+  h.get('lang').onclick();
+  assert.match(h.get('alertTitle').textContent, /矿机停产提醒 · 内测免费/);
+  assert.match(h.get('alertBody').textContent, /停止产出.*Telegram.*付费版.*存到我们的服务器.*不会要求连接钱包或签名/);
+  assert.match(h.get('alertMsg').textContent, /已登记/);
+  h.get('other').onclick();
+  assert.equal(h.get('alertBox').hidden, true);
+});
+
+test('rig-stop alert sign-up failures stay local and readable, including mirrors without the endpoint', async () => {
+  let status = 404;
+  const h = harness({ wallet: async () => ({ circuits: 1, rigs: [] }),
+    fetch: async () => ({ ok: status === 200, status, json: async () => status === 429 ? { ok: false, error: 'limit' } : JSON.parse('<html>') }) });
+  await flush();
+  await h.context.ui.lookup('0x3333333333333333333333333333333333333333');
+  h.get('alertTg').value = 'leo_miner';
+  await h.get('alertGo').onclick();
+  assert.match(h.get('alertMsg').textContent, /Could not submit/);
+  assert.equal(h.get('alertGo').disabled, false);
+  status = 429;
+  await h.get('alertGo').onclick();
+  assert.match(h.get('alertMsg').textContent, /address limit/);
+  assert.match(h.get('answer').innerHTML, /FAB is \$0.25 now/);
+  const noFetch = harness({ wallet: async () => ({ circuits: 1, rigs: [] }) });
+  await flush();
+  await noFetch.context.ui.lookup('0x3333333333333333333333333333333333333333');
+  noFetch.get('alertTg').value = 'leo_miner';
+  await noFetch.get('alertGo').onclick();
+  assert.match(noFetch.get('alertMsg').textContent, /Could not submit/);
+});
+
+test('index loads the stats beacon as a separate module and every alert string exists in both languages', async () => {
+  assert.match(html, /<script type="module" src="\/track.mjs"><\/script>/);
+  for (const key of ['alertTitle', 'alertBody', 'alertTgPh', 'alertGo', 'alertSending', 'alertOk', 'alertBadTg', 'alertLimit', 'alertFail']) {
+    assert.equal((source.match(new RegExp(`\\b${key}: '`, 'g')) || []).length, 2, key);
+  }
+});

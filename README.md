@@ -78,7 +78,7 @@ git clone https://github.com/runesleo/fabx-miner-desk.git
 cd fabx-miner-desk
 ```
 
-This is static HTML and native ES modules. No package installation, build step, application backend, or API key is required. You can also download the source archive.
+This is static HTML and native ES modules. No package installation, build step, or API key is required, and chain data never passes through a backend. The hosted Cloudflare Pages copy adds two small optional functions (usage counts and the alert-beta waitlist, see Privacy); the page works fully without them. You can also download the source archive.
 
 **Any AI coding agent:** start with [PRODUCT.md](PRODUCT.md), the contract/data definitions above, and [test/](test/). The offline self-check is `node --test`; no agent framework is required.
 
@@ -91,9 +91,13 @@ This is static HTML and native ES modules. No package installation, build step, 
 
 **Privacy:** the app is read-only and works without connecting a wallet. It never signs messages, approves tokens, or sends transactions. Addresses are used only for public-chain reads. The optional wallet button makes only `eth_requestAccounts`, after an explicit click, to obtain an address; pasting an address or using the example needs no extension.
 
-There is no application backend. RPC/API providers receive the necessary read queries, including an address where applicable, and normal connection metadata. Local storage retains preferences, custom rules, cached observations, and the last non-example address. Clear site data to remove them; the built-in example is not saved as your last address.
+Chain and price reads go directly from your browser to public providers, never through our server. RPC/API providers receive the necessary read queries, including an address where applicable, and normal connection metadata. Local storage retains preferences, custom rules, cached observations, and the last non-example address. Clear site data to remove them; the built-in example is not saved as your last address.
 
-`/?address=0x…` and `/rigs?address=0x…` support explicit address lookups. Such links reach the static host before the page clears their query string. Paste an address if you do not want it in the initial URL request. Normal lookups switch to `/rigs` without an address in the URL. Preserve the relative `rigs/index.html` symlink when copying or serving this tree. The repository has no configured analytics beacon; the hosted deployment may add Cloudflare Pages Web Analytics or other host-level analytics.
+`/?address=0x…` and `/rigs?address=0x…` support explicit address lookups. Such links reach the static host before the page clears their query string. Paste an address if you do not want it in the initial URL request. Normal lookups switch to `/rigs` without an address in the URL. Preserve the relative `rigs/index.html` symlink when copying or serving this tree.
+
+**Usage stats (hosted copy only):** to report usage for the X Layer TapeOut hackathon, `track.mjs` sends one count per page load to `/api/hit` (a Cloudflare Pages Function backed by D1). It stores the UTC day, the page (`/` or `/rigs`), the interface language, the referring site's hostname only (or nothing), a random ID kept in this browser's local storage under `fmd.cid`, and a timestamp. It does not store IP addresses, user agents, wallet addresses, full URLs, or query strings, and sets no cookies. Nothing is sent when Do Not Track is on or local storage is unavailable. To opt out, enable Do Not Track, block `/api/hit`, or clear site data (which also resets the random ID). The DeWeb copy and local static servers have no functions, so they record nothing; the beacon fails silently there. Cloudflare still sees normal connection metadata for every request, as for any hosted page.
+
+**Rig-stop alerts (free beta):** after a non-example address lookup, the asset card offers an optional Telegram sign-up. Submitting it, and only that, sends the looked-up address, your Telegram username, and the interface language to `/api/alerts`, which stores them (no IP) so we can message you if a rig of that address stops producing or its output drops abnormally. The beta is free; a paid plan is planned later. One Telegram username can register at most 20 addresses. The page stays read-only: it never asks you to connect a wallet or sign for alerts. To be removed, contact the author (see About the author).
 
 The demo address `0xe0cb3d9542a786c60605dd55efb9ef79490a3d6c` is a public example address, not the author's holdings. The asset-card screenshot is a historical snapshot of that example, not a current balance. Screenshots and fixtures can contain public market activity and example-wallet balances. No private key, seed phrase, or credentials are needed. Calculations are informational, not investment advice.
 
@@ -119,6 +123,8 @@ node scripts/live-check.mjs --chain-only
 ```
 
 The second command disables the optional FabX candidate-ID API to exercise on-chain discovery. These checks depend on live services; Node does not enforce browser CORS, so they do not replace a browser check.
+
+**Optional Cloudflare Pages functions** (only needed for hosted stats and alert sign-ups): `functions/api/` holds the two functions, `schema.sql` the D1 tables, and `wrangler.toml` binds a D1 database as `DB` (fill in your own `database_id`). Create the tables with `wrangler d1 execute <database> --file=schema.sql`, then deploy with `wrangler pages deploy`. `_routes.json` limits functions to `/api/*`; everything else stays static.
 
 ## Verified
 
@@ -150,6 +156,9 @@ Offline tests use fake providers and fixed fixtures for calculations, ownership 
 
 **Distribution**
 - [ ] Support deployment on DeWeb and document the static-host setup.
+
+**Alerts**
+- [ ] Deliver rig-stop / abnormal-output Telegram alerts to beta sign-ups; later offer them as a paid plan, with the dashboard staying free.
 
 ## About the author
 

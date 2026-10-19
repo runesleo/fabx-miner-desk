@@ -75,7 +75,7 @@ git clone https://github.com/runesleo/fabx-miner-desk.git
 cd fabx-miner-desk
 ```
 
-也可以下载源码压缩包。项目由静态 HTML 与原生 ES modules 组成，无需安装 npm 包、无需构建，也没有应用后端。
+也可以下载源码压缩包。项目由静态 HTML 与原生 ES modules 组成，无需安装 npm 包、无需构建，链上数据也不经过任何后端。Cloudflare Pages 在线版额外有两个可选的小函数（使用统计和提醒内测登记，见隐私说明）；没有它们页面照样完整可用。
 
 **交给任意 AI 编程助手维护时**：先读 [PRODUCT.md](PRODUCT.md)、上面的合约与数据口径，再看 [test/](test/)。只读自检命令是 `node --test`，不依赖特定 Agent 框架。
 
@@ -88,9 +88,13 @@ cd fabx-miner-desk
 
 **隐私说明**：这是只读工具，不连钱包也能用，不签名、不授权代币、不发交易。地址只用于读取公开链上数据。可选的钱包按钮仅在用户点击后调用 `eth_requestAccounts` 获取地址；粘贴地址或使用公开示例无需钱包插件。
 
-工具没有应用后端，但公共 RPC/API 服务商会收到查询所需的信息，包括适用时的地址，以及正常连接元数据。偏好、自定义规则、缓存观察值和上次使用的非示例地址存放在浏览器 local storage 中，清除站点数据即可移除；示例地址不会保存为你的上次地址。
+链上与行情读取由浏览器直接请求公共服务商，不经过本站服务器；公共 RPC/API 服务商会收到查询所需的信息，包括适用时的地址，以及正常连接元数据。偏好、自定义规则、缓存观察值和上次使用的非示例地址存放在浏览器 local storage 中，清除站点数据即可移除；示例地址不会保存为你的上次地址。
 
-`/?address=0x…` 和 `/rigs?address=0x…` 可直接打开地址查询。这类链接会先到静态托管服务，再由页面清除查询参数；不希望地址出现在初始 URL 请求里时，请手动粘贴。普通查询切换到 `/rigs`，URL 不附地址。复制或托管时保留 `rigs/index.html` 指向主页的相对软链接。本仓库未配置统计 beacon；在线托管可能注入 Cloudflare Pages Web Analytics 等统计功能。
+`/?address=0x…` 和 `/rigs?address=0x…` 可直接打开地址查询。这类链接会先到静态托管服务，再由页面清除查询参数；不希望地址出现在初始 URL 请求里时，请手动粘贴。普通查询切换到 `/rigs`，URL 不附地址。复制或托管时保留 `rigs/index.html` 指向主页的相对软链接。
+
+**使用统计（仅在线托管版）**：为向 X Layer TapeOut 黑客松报告使用情况，`track.mjs` 每次打开页面向 `/api/hit`（Cloudflare Pages Function + D1）发送一次计数。只存：UTC 日期、页面（`/` 或 `/rigs`）、界面语言、来源网站域名（或空）、一个保存在本浏览器 local storage `fmd.cid` 里的随机编号，以及时间戳。不存 IP、浏览器标识（user agent）、钱包地址、完整 URL 或查询参数，也不设 cookie。开启「请勿追踪」（Do Not Track）或 local storage 不可用时不发送。退出方式：开启 Do Not Track、屏蔽 `/api/hit`，或清除站点数据（同时重置随机编号）。DeWeb 镜像和本地静态服务器没有函数，不记录任何统计，beacon 在那里静默失败。和任何托管网页一样，Cloudflare 仍会看到每个请求的正常连接元数据。
+
+**矿机停产提醒（内测免费）**：查询非示例地址后，资产卡下方提供可选的 Telegram 登记。只有点击提交时，才会把当前查询的地址、Telegram 用户名和界面语言发送到 `/api/alerts` 并保存（不存 IP），用于在该地址的矿机停止产出或产出异常下降时通过 Telegram 通知你。内测期间免费，之后计划推出付费版。一个 Telegram 用户名最多登记 20 个地址。页面仍然只读：提醒不需要连接钱包，也不需要签名。需要删除登记请联系作者（见「关于作者」）。
 
 内置地址 `0xe0cb3d9542a786c60605dd55efb9ef79490a3d6c` 是公开示例地址，非作者持仓；资产卡截图是该示例的历史快照，不代表当前余额。截图和测试样本可能包含公开市场活动及示例余额。工具不需要私钥、助记词或任何凭证，计算结果不构成投资建议。
 
@@ -116,6 +120,8 @@ node scripts/live-check.mjs --chain-only
 ```
 
 第二条禁用可选的 FabX 候选 ID API，检查链上发现路径。在线检查受服务可用性影响；Node 不执行浏览器 CORS 限制，不能用它代替真实浏览器验收。
+
+**可选：Cloudflare Pages 函数**（只有托管统计和提醒登记才需要）：`functions/api/` 下是两个函数，`schema.sql` 是 D1 表结构，`wrangler.toml` 绑定名为 `DB` 的 D1 数据库（`database_id` 需填入你自己的）。用 `wrangler d1 execute <数据库名> --file=schema.sql` 建表后，用 `wrangler pages deploy` 部署。`_routes.json` 让函数只处理 `/api/*`，其余仍是静态文件。
 
 ## 已验证
 
@@ -147,6 +153,9 @@ node scripts/live-check.mjs --chain-only
 
 **部署与使用**
 - [ ] 支持 DeWeb 部署，补齐静态托管使用说明。
+
+**提醒**
+- [ ] 向内测登记用户推送矿机停产 / 产出异常的 Telegram 提醒；之后作为付费功能提供，看板本身保持免费。
 
 ## 关于作者
 
