@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="modulepreload" href="../rig-check.mjs">
+<link rel="modulepreload" href="../desk.mjs">
+<link rel="modulepreload" href="../pod.mjs">
+<link rel="modulepreload" href="../rpc.mjs">
+<title>矿机查验 · FabX Miner Desk</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec;
+    --accent: #2563e0; --on-accent: #ffffff; --good: #12805c; --warn: #995c00; --bad: #c0362c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37;
+      --accent: #6b9bff; --on-accent: #0e1013; --good: #3fbf8f; --warn: #e0a440; --bad: #ef6b60; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 12px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  header nav { display: flex; gap: 10px; font-size: 13px; }
+  header nav a { color: var(--accent); text-decoration: none; }
+  .ghost { font: inherit; font-size: 13px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  h2 { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
+  .vectors { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, select { font: 15px var(--mono); padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); min-width: 0; flex: 1; }
+  .primary { font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 12px 16px; background: var(--accent); color: var(--on-accent); cursor: pointer; width: 100%; margin-top: 8px; }
+  .primary:disabled { opacity: .55; cursor: default; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; margin-top: 8px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .kv span:nth-child(even) { font-family: var(--mono); text-align: right; overflow-wrap: anywhere; }
+  .verdict { font-size: 18px; font-weight: 600; margin: 0; }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .err { color: var(--bad); font-size: 14px; }
+  .source { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin-top: 10px; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <b id="title">矿机查验</b>
+    <nav>
+      <a href="../" id="navDesk">Desk</a>
+      <a href="../faq/" id="navFaq">FAQ</a>
+      <button type="button" class="ghost" id="lang">中文</button>
+    </nav>
+  </header>
+
+  <section class="card">
+    <h1 id="h1">电路 / 矿机编号查验</h1>
+    <p class="sub" id="lead">只读：读取链上状态；检查能不能通过这道题的全部官方测试向量。全部通过也不代表所有输入都正确，也不保证不被移出榜位。</p>
+    <div class="row">
+      <div style="flex:1;min-width:140px">
+        <label for="chain" id="chainL">链</label>
+        <select id="chain"><option value="fabx">FabX</option><option value="bsc">TapeOut · BSC</option></select>
+      </div>
+      <div style="flex:2;min-width:160px">
+        <label for="processor" id="procL">处理器（BSC 可选）</label>
+        <select id="processor" hidden>
+          <option value="">默认</option>
+          <option value="tapeout">TapeOut</option>
+          <option value="behemoth">Behemoth</option>
+        </select>
+      </div>
+    </div>
+    <label for="rig" id="rigL">编号</label>
+    <div class="row">
+      <input id="rig" inputmode="numeric" autocomplete="off" placeholder="例如 13659 或 TapeOut#11">
+      <button type="button" class="primary" id="go" style="width:auto;margin:0;flex:0 0 auto">查验</button>
+    </div>
+    <p class="err" id="formErr" hidden></p>
+  </section>
+
+  <section class="card" id="out" hidden>
+    <h2 id="chainTitle">链上状态</h2>
+    <p class="verdict" id="chainVerdict" role="status" aria-live="polite"></p>
+    <div class="kv" id="kv"></div>
+    <p class="source" id="source"></p>
+    <div class="vectors">
+      <h2 id="vectorsTitle">官方向量查验</h2>
+      <p class="verdict" id="verdict" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</main>
+<script type="module">
+import { checkRig, verifyRelayUrl } from '../rig-check.mjs';
+
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+
+const L = {
+  zh: {
+    title: '矿机查验', navDesk: '收益 Desk', navFaq: '常见问题', lang: 'EN',
+    h1: '电路 / 矿机编号查验',
+    lead: '只读：读取链上状态；FabX 矿机还会检查能不能通过这道题的全部官方测试向量；全部通过也不代表所有输入都正确，也不保证不被移出榜位。BSC 当前没有接入官方向量验证，只显示链上状态。不签名、不发交易。',
+    chainL: '链', procL: '处理器（BSC）', rigL: '编号', rigPh: '例如 13659 或 TapeOut#11',
+    go: '查验', restart: '重新查验（取消上次）', footer: '只显示链上读到的状态和官方接口的结果；不是投资建议。',
+    chainTitle: '链上状态', vectorsTitle: '官方向量查验',
+    reads: { pending: '链上状态读取中…', complete: '链上状态已读取', not_found: '链上没有这个电路 NFT', read_failed: '读取失败（可重试）；已读到的字段保留在下方', incomplete: '结果不完整；请重试缺失的链上字段' },
+    formErr: { missing_rig: '请输入编号', invalid_rig_id: '编号格式无效', unknown_chain: '未知链', unknown_processor: '未知处理器，请检查编号前缀或处理器选择', processor_mismatch: '编号前缀、所选链或处理器不匹配，请纠正后重试' },
+    mining: { mining: '挖矿中', revoked: '已撤销', stopped: '冷静期/停挖', idle: '未开挖', other: '其他状态' },
+    yes: '是', no: '否', unknown: '未知',
+    vectors: {
+      all_pass: (p, t) => `全部官方向量通过（${p}/${t}）`,
+      fail_at: (i, p, t) => `官方接口报告向量 #${i} 答错（通过 ${p}/${t}）`,
+      pending: '官方向量查验中…',
+      incomplete: '结果不完整，尚不能判断通过或答错',
+      read_failed: '读取失败（可重试）',
+      undetectable: '无法检测官方向量',
+      no_task: '没认领题目（taskId=0），没有题目向量可跑',
+      vectors_api_unsupported: '当前没有接入官方向量验证',
+      circuit_not_found: '链上没有这个电路 NFT',
+      no_miner_record: '没有挖矿记录',
+      netlist_unreadable: '网表读取失败',
+      verify_unreachable: '官方接口连不上，稍后再试',
+      verify_error: '官方接口返回异常，稍后再试',
+      verify_incomplete: '官方接口未返回完整且一致的验证证据',
+      chain_unreadable: '链上输入未读完整',
+    },
+    labels: {
+      displayId: '编号', owner: '持有人', block: '区块',
+      mining: '是否在挖', revoked: '已撤销', optimal: '最优首创', verified: '已验证池',
+      taskId: '题目 ID', processorOk: '官方处理器',
+    },
+    source: (chain, block) => `来源：链上 eth_call · ${chain} · 区块 ${block}`,
+  },
+  en: {
+    title: 'Rig check', navDesk: 'Miner Desk', navFaq: 'FAQ', lang: '中文',
+    h1: 'Circuit / rig ID check',
+    lead: 'Read-only: reads on-chain state and checks whether FabX rigs pass every official test vector for their task. Passing them all does not prove correctness for every input or guarantee the rig keeps its leaderboard slot. Official vector verification is not currently connected for BSC; only on-chain state is shown. No signing, no transactions.',
+    chainL: 'Chain', procL: 'Processor (BSC)', rigL: 'ID', rigPh: 'e.g. 13659 or TapeOut#11',
+    go: 'Check', restart: 'Check again (cancel previous)', footer: 'Shows on-chain state and official API results only; not investment advice.',
+    chainTitle: 'On-chain state', vectorsTitle: 'Official vector verification',
+    reads: { pending: 'Reading on-chain state…', complete: 'On-chain state read', not_found: 'No such circuit NFT on chain', read_failed: 'Read failed (retry available); successfully read fields remain below', incomplete: 'Incomplete result; retry missing on-chain fields' },
+    formErr: { missing_rig: 'Enter an ID', invalid_rig_id: 'Invalid ID', unknown_chain: 'Unknown chain', unknown_processor: 'Unknown processor; check the prefix or processor selection', processor_mismatch: 'The ID prefix, selected chain or processor do not match; correct them and retry' },
+    mining: { mining: 'Mining', revoked: 'Revoked', stopped: 'Cooldown / stopped', idle: 'Not started', other: 'Other' },
+    yes: 'Yes', no: 'No', unknown: 'Unknown',
+    vectors: {
+      all_pass: (p, t) => `All official vectors passed (${p}/${t})`,
+      fail_at: (i, p, t) => `The official API reports vector #${i} failed (${p}/${t} passed)`,
+      pending: 'Checking official vectors…',
+      incomplete: 'Incomplete result; cannot conclude pass or fail',
+      read_failed: 'Read failed (retry available)',
+      undetectable: 'Official vectors not checkable',
+      no_task: 'No claimed task (taskId=0), so no task vectors to run',
+      vectors_api_unsupported: 'Official vector verification is not currently connected',
+      circuit_not_found: 'No such circuit NFT on chain',
+      no_miner_record: 'No miner record',
+      netlist_unreadable: 'Netlist read failed',
+      verify_unreachable: 'Official API unreachable, try again later',
+      verify_error: 'Official API error, try again later',
+      verify_incomplete: 'The official API did not return complete, consistent verification evidence',
+      chain_unreadable: 'On-chain inputs could not be read completely',
+    },
+    labels: {
+      displayId: 'ID', owner: 'Owner', block: 'Block',
+      mining: 'Mining', revoked: 'Revoked', optimal: 'Optimal first', verified: 'Verified pool',
+      taskId: 'Task ID', processorOk: 'Official processor',
+    },
+    source: (chain, block) => `Source: on-chain eth_call · ${chain} · block ${block}`,
+  },
+};
+
+let lang = store.get('fmd.lang') === 'en' ? 'en' : 'zh';
+const $ = (id) => document.getElementById(id);
+let request = null;
+let currentResult = null;
+
+function applyLang() {
+  const t = L[lang];
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  for (const [id, key] of Object.entries({
+    title: 'title', navDesk: 'navDesk', navFaq: 'navFaq', h1: 'h1', lead: 'lead',
+    chainL: 'chainL', procL: 'procL', rigL: 'rigL', go: 'go', footer: 'footer',
+    chainTitle: 'chainTitle', vectorsTitle: 'vectorsTitle',
+  })) $(id).textContent = t[key];
+  $('lang').textContent = t.lang;
+  $('rig').placeholder = t.rigPh;
+  $('processor').hidden = $('chain').value !== 'bsc';
+  $('go').textContent = request ? t.restart : t.go;
+  if (currentResult) render(currentResult);
+}
+
+function vectorLine(v, t) {
+  if (v.state === 'all_pass') return t.vectors.all_pass(v.passed, v.total);
+  if (v.state === 'fail_at') return t.vectors.fail_at(v.index, v.passed, v.total);
+  if (v.state === 'pending') return t.vectors.pending;
+  const reason = v.reason && t.vectors[v.reason] ? t.vectors[v.reason] : t.vectors.undetectable;
+  if (v.state === 'incomplete' || v.state === 'read_failed') return `${t.vectors[v.state]}：${reason}`;
+  return typeof reason === 'function' ? reason() : reason;
+}
+
+function verdictClass(v) {
+  if (v.state === 'all_pass') return 'good';
+  if (v.state === 'fail_at') return 'bad';
+  return 'warn';
+}
+
+function render(result) {
+  const t = L[lang];
+  currentResult = result;
+  const cs = result.chainStatus;
+  const yn = (b) => b == null ? t.unknown : (b ? t.yes : t.no);
+  const rows = [
+    [t.labels.displayId, result.displayId],
+    [t.labels.owner, result.owner || t.unknown],
+    [t.labels.processorOk, yn(cs ? cs.processorOk : null)],
+    [t.labels.mining, cs ? t.mining[cs.miningLabel] || t.unknown : t.unknown],
+    [t.labels.revoked, yn(cs?.revoked)],
+    [t.labels.optimal, yn(cs?.optimal)],
+    [t.labels.verified, yn(cs?.verified)],
+    [t.labels.taskId, cs ? String(cs.taskId) : t.unknown],
+    [t.labels.block, result.block == null ? t.unknown : String(result.block)],
+  ];
+  $('kv').replaceChildren(...rows.flatMap((row) => row.map((text) => {
+    const span = document.createElement('span');
+    span.textContent = text;
+    return span;
+  })));
+  $('chainVerdict').textContent = t.reads[result.readState] || t.reads.incomplete;
+  $('chainVerdict').className = `verdict ${result.readState === 'complete' ? '' : 'warn'}`;
+  $('verdict').textContent = vectorLine(result.vectors, t);
+  $('verdict').className = `verdict ${verdictClass(result.vectors)}`;
+  $('source').textContent = t.source(result.chain, result.block ?? t.unknown);
+  $('out').hidden = false;
+}
+
+async function run({ processorHint } = {}) {
+  request?.abort();
+  const controller = new AbortController();
+  request = controller;
+  currentResult = null;
+  $('formErr').hidden = true;
+  $('out').hidden = true;
+  const rig = $('rig').value.trim();
+  const chain = $('chain').value;
+  const processor = processorHint ?? (chain === 'bsc' ? $('processor').value : '');
+  $('go').textContent = L[lang].restart;
+  try {
+    const result = await checkRig({ rig, chain, processor: processor || undefined }, {
+      verifyUrl: verifyRelayUrl(location), signal: controller.signal,
+      onProgress: (partial) => { if (request === controller && !controller.signal.aborted) render(partial); },
+    });
+    if (request !== controller || controller.signal.aborted) return;
+    if (!result.ok) {
+      $('formErr').textContent = L[lang].formErr[result.error] || result.error;
+      $('formErr').hidden = false;
+      return;
+    }
+    const q = new URLSearchParams({ rig, chain });
+    if (processor) q.set('processor', processor);
+    history.replaceState(null, '', `?${q}`);
+    render(result);
+  } catch (e) {
+    if (request !== controller || controller.signal.aborted) return;
+    $('formErr').textContent = e?.message || String(e);
+    $('formErr').hidden = false;
+  } finally {
+    if (request === controller) {
+      request = null;
+      $('go').textContent = L[lang].go;
+    }
+  }
+}
+
+function bootParams() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('rig') || q.get('chain') || q.get('processor')) return q;
+  const hash = location.hash?.startsWith('#') ? location.hash.slice(1) : '';
+  if (!hash || hash.startsWith('rig-')) return q;
+  return new URLSearchParams(hash);
+}
+
+function boot() {
+  const q = bootParams();
+  if (q.get('chain') === 'bsc') $('chain').value = 'bsc';
+  if (q.get('rig')) $('rig').value = q.get('rig');
+  if (q.get('processor')) $('processor').value = q.get('processor');
+  applyLang();
+  if (q.get('rig')) run({ processorHint: q.get('processor') ?? undefined });
+}
+
+$('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; store.set('fmd.lang', lang); applyLang(); };
+$('chain').onchange = () => { $('processor').hidden = $('chain').value !== 'bsc'; };
+$('go').onclick = () => run();
+$('rig').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+boot();
+</script>
+</body>
+</html>

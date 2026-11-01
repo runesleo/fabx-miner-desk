@@ -1,9 +1,11 @@
 // POST /api/hit — one anonymous page-load count.
-// Stores only: UTC day, whitelisted path, zh|en, coarse referrer host, a random per-browser id, and a timestamp.
+// Stores only: UTC day, whitelisted path, zh|en, coarse referrer host, a random per-browser id, surface, and a timestamp.
 // Never stores IP, user agent, wallet addresses, full URLs or query strings.
 
+import { normalizeSitePath } from '../../site-path.mjs';
+import { optionsResponse, requestSurface, withCors } from './cors.js';
+
 const MAX_BODY = 2048;
-const PATHS = new Set(['/', '/rigs']);
 const LANGS = new Set(['zh', 'en']);
 const CID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -38,21 +40,24 @@ export function refHost(ref) {
 
 export function parseHit(body) {
   const cid = typeof body.cid === 'string' ? body.cid.toLowerCase() : '';
-  const path = body.path === '/rigs/' ? '/rigs' : body.path;
-  if (!CID.test(cid) || !PATHS.has(path) || !LANGS.has(body.lang)) return null;
+  if (typeof body.path !== 'string' || body.path.includes('?') || body.path.includes('#')) return null;
+  const path = normalizeSitePath(body.path);
+  if (!CID.test(cid) || !path || !LANGS.has(body.lang)) return null;
   return { cid, path, lang: body.lang, ref: refHost(body.ref) };
 }
 
 export async function onRequest({ request, env }) {
-  if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
+  if (request.method === 'OPTIONS') return optionsResponse(request);
+  if (request.method !== 'POST') return withCors(request, new Response(null, { status: 405, headers: { allow: 'POST' } }));
   const { value, error } = await readJson(request);
-  if (error) return reply(error);
+  if (error) return withCors(request, reply(error));
   const hit = parseHit(value);
-  if (!hit) return reply(400);
-  if (!env?.DB) return reply(503);
+  if (!hit) return withCors(request, reply(400));
+  if (!env?.DB) return withCors(request, reply(503));
   const ts = Date.now();
   const day = new Date(ts).toISOString().slice(0, 10);
-  await env.DB.prepare('INSERT INTO hits (day, path, lang, ref, cid, ts) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(day, hit.path, hit.lang, hit.ref, hit.cid, ts).run();
-  return reply(204);
+  const surface = requestSurface(request);
+  await env.DB.prepare('INSERT INTO hits (day, path, lang, ref, cid, ts, surface) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(day, hit.path, hit.lang, hit.ref, hit.cid, ts, surface).run();
+  return withCors(request, reply(204));
 }

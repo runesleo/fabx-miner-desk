@@ -1,1 +1,1880 @@
-../index.html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="modulepreload" href="../desk.mjs">
+<link rel="modulepreload" href="../rpc.mjs">
+<link rel="modulepreload" href="../multicall.mjs">
+<link rel="modulepreload" href="../nand-price.mjs">
+<link rel="modulepreload" href="../pod.mjs">
+<title>FabX Miner Desk</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%232f6fed%27/%3E%3Cpath d=%27M9 22V10h9M9 16h7M20 22l4-12%27 stroke=%27white%27 stroke-width=%273%27 fill=%27none%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<meta name="description" content="Should I add hashpower to FabX today? One answer, read live from X Layer. Read-only.">
+<style>
+  /* One column, one answer first; everything else folds away. */
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec; --soft: #eef1f5;
+    --accent: #2563e0; --on-accent: #ffffff; --good: #12805c; --warn: #995c00; --bad: #c0362c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37; --soft: #20242b;
+      --accent: #6b9bff; --on-accent: #0e1013; --good: #3fbf8f; --warn: #e0a440; --bad: #ef6b60; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 56px; display: grid; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  header b { font-size: 17px; letter-spacing: -.01em; }
+  .ghost { font: inherit; font-size: 13px; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px 6px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .eyebrow { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+  .answer { font-size: 22px; line-height: 1.45; font-weight: 600; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  .answer .num { font-family: var(--mono); }
+  .sub { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { font: inherit; font-size: 15px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .primary { font: inherit; font-weight: 600; width: 100%; border: 0; border-radius: 12px; padding: 12px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+  .primary:disabled { opacity: .55; cursor: default; }
+  .link { font: inherit; font-size: 14px; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input { font: 15px var(--mono); padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); min-width: 0; flex: 1; }
+  .small { font-size: 13px; color: var(--muted); }
+  .err { color: var(--bad); font-size: 14px; margin: 8px 0 0; }
+  .since { font-size: 14px; color: var(--muted); margin: 0; }
+  details.more { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 20px; }
+  details.more > summary { cursor: pointer; padding: 12px 0; color: var(--muted); font-size: 15px; }
+  details.more[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 14px; margin: 8px 0 16px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .kv span:nth-child(even) { font-family: var(--mono); text-align: right; }
+  h3 { font-size: 15px; margin: 16px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 4px 2px; }
+  td input { width: 64px; flex: none; padding: 6px 8px; }
+  ul.method { padding-left: 18px; font-size: 13px; color: var(--muted); }
+  footer { text-align: center; font-size: 12px; color: var(--muted); }
+  .steps { margin: 0; font-size: 15px; color: var(--muted); }
+  .asset-card { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 2px; }
+  .asset-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+  .asset-stat { background: var(--soft); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .asset-stat span, .asset-stat small { display: block; color: var(--muted); font-size: 12px; }
+  .asset-stat strong { display: block; font: 600 18px/1.6 var(--mono); overflow-wrap: anywhere; }
+  .asset-note { margin: 8px 0; font-size: 12px; color: var(--muted); }
+  .rig-table, .future-table { table-layout: fixed; font-size: 12px; }
+  .rig-table th, .future-table th { color: var(--muted); font-weight: 500; text-align: left; }
+  .rig-table th, .rig-table td, .future-table th, .future-table td { padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+  .rig-table th:nth-child(1) { width: 18%; }
+  .rig-table th:nth-child(2) { width: 23%; }
+  .rig-table th:nth-child(3) { width: 31%; }
+  .rig-table th:nth-child(4) { width: 28%; }
+  .rig-table .rig-number, .future-table td { font-family: var(--mono); }
+  .rig-value small { display: block; color: var(--muted); }
+  .rig-summary { font-size: 12px; white-space: nowrap; }
+  .rig-list > summary { cursor: pointer; color: var(--accent); font-size: 13px; padding: 10px 0; }
+  .rig-stopped { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  .rig-stopped .rig-status { color: var(--warn); font-weight: 600; }
+  #entryAnswer { font-size: 18px; line-height: 1.4; text-wrap: initial; }
+  #entryTitle { margin: 4px 0 0; }
+  .entry-values { margin: 10px 0 6px; }
+  .entry-values strong { font-size: 19px; }
+  .entry-row { padding: 13px 0; border-top: 1px solid var(--line); }
+  .entry-row:first-child { border-top: 0; }
+  .entry-row .row { justify-content: space-between; align-items: baseline; }
+  .entry-row strong { font: 600 16px var(--mono); }
+  .entry-row p { margin: 5px 0 0; font-size: 12px; color: var(--muted); }
+  .entry-row a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  #entryStamp, #entryStatus { font-size: 12px; overflow-wrap: anywhere; }
+  #entryStamp { margin: 0; }
+  #entryDetails > summary, #riskDetails > summary { padding: 6px 0; }
+  .risk { padding: 8px 12px; border-left: 3px solid var(--muted); }
+  .risk h2 { margin: 0; font-size: 12px; font-weight: 500; }
+  .risk p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+  .source { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .official-links { display: grid; gap: 8px; margin: 12px 0; }
+  .official-links a { display: block; padding: 10px 12px; border-radius: 10px; background: var(--soft); color: var(--accent); font-size: 14px; text-decoration: none; }
+  .basics-number { margin: 12px 0; font-size: 14px; }
+  .basics-number small { display: block; font-size: 12px; color: var(--muted); }
+  .alert-box { background: var(--soft); border-radius: 12px; padding: 2px 14px 10px; margin-top: 14px; }
+  .alert-box h3 { margin-top: 10px; }
+  .alert-box input { background: var(--card); }
+  input.threshold { flex: 0 0 5em; width: 5em; text-align: right; }
+  .feedback-box { margin: 28px 0 10px; }
+  .feedback-box input { flex: 1; min-width: 200px; }
+  .alert-box .asset-note { margin: 4px 0 10px; }
+  @media (max-width: 440px) {
+    main { padding-top: 16px; gap: 8px; }
+    #entryCompare { padding: 16px; }
+    details.more { padding: 2px 16px; }
+    details.more > summary { padding: 9px 0; }
+    .rig-summary { font-size: 11px; letter-spacing: -.2px; }
+    .rig-table th, .rig-table td { padding: 7px 2px; }
+    .future-table th, .future-table td { padding: 8px 2px; font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: no-preference) { .card { transition: opacity .2s; } }
+  .view-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
+  .view-tabs button { font: inherit; font-size: 15px; font-weight: 600; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); padding: 8px 4px; margin-right: 12px; cursor: pointer; }
+  .view-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .radar-list { display: grid; gap: 10px; margin-top: 14px; }
+  .radar-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); min-width: 0; }
+  .radar-item h3 { margin: 0; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+  .radar-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+  .radar-badge { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--ink); }
+  .radar-ends { color: var(--warn); }
+  .radar-summary { margin: 6px 0 0; font-size: 14px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .radar-link { display: inline-block; margin-top: 6px; font-size: 14px; color: var(--accent); text-decoration: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header><b id="appTitle">FabX Miner Desk</b><nav style="display:flex;gap:10px;align-items:center;font-size:13px;flex-wrap:wrap"><a href="../start/" style="color:var(--accent);text-decoration:none" id="navStart">入门</a><a href="../links/" style="color:var(--accent);text-decoration:none" id="navLinks">入口</a><a href="../check/" style="color:var(--accent);text-decoration:none" id="navCheck">查验</a><a href="../faq/" style="color:var(--accent);text-decoration:none" id="navFaq">FAQ</a><a href="../board/" style="color:var(--accent);text-decoration:none" id="navBoard">看板</a><button class="ghost" id="lang"></button></nav></header>
+
+  <div class="view-tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" id="tabRadar" aria-controls="radarView" aria-selected="true"></button>
+    <button type="button" role="tab" id="tabCalc" aria-controls="calcView" aria-selected="false"></button>
+  </div>
+
+  <section class="card" id="radarView" role="tabpanel" aria-labelledby="radarTitle">
+    <h2 id="radarTitle" style="margin:0"></h2>
+    <p class="sub" id="radarSub"></p>
+    <p class="small" id="radarState" role="status"></p>
+    <div class="radar-list" id="radarList" aria-live="polite"></div>
+    <p class="small" style="margin:14px 0 0"><button type="button" class="link" id="radarCalc"></button></p>
+    <p class="small" style="margin:6px 0 0"><a id="radarMore" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none"></a></p>
+  </section>
+
+  <div id="calcView" role="tabpanel" aria-labelledby="tabCalc" style="display:contents" hidden>
+  <aside class="card risk" id="newbieRisk" aria-labelledby="riskTitle">
+    <h2 id="riskTitle"></h2>
+    <details class="rig-list" id="riskDetails">
+      <summary id="riskDetailTitle"></summary>
+      <p id="riskText"></p><p id="riskState"></p>
+    </details>
+  </aside>
+
+  <p class="since" id="since" hidden></p>
+
+  <section class="card" id="entryCompare" aria-labelledby="entryAnswer" aria-describedby="entryTitle">
+    <p class="answer" id="entryAnswer" aria-live="polite"></p>
+    <p class="eyebrow" id="entryTitle"></p>
+    <div class="asset-summary entry-values" id="entryValues"></div>
+    <details class="rig-list" id="crosschain">
+      <summary id="crosschainTitle"></summary>
+      <div id="crosschainBody"></div>
+    </details>
+    <p class="small" id="entryStamp"></p>
+    <p class="asset-note" id="entryFreshness" hidden></p>
+    <details class="rig-list" id="entryPayback">
+      <summary id="entryPaybackTitle"></summary>
+      <div id="entryPaybackRows"></div>
+    </details>
+    <details class="rig-list" id="entryDetails">
+      <summary id="entryDetailTitle"></summary>
+      <p class="asset-note" id="entryScope"></p>
+      <p class="source" id="entryObservation"></p>
+      <p class="small" id="entryStatus" role="status"></p>
+      <p class="source" id="entrySources"></p>
+      <p class="asset-note" id="entryCosts"></p>
+      <button class="link" id="entryRetry"></button>
+    </details>
+  </section>
+
+  <section class="card" id="cheapBox">
+    <h3 id="cheapTitle"></h3>
+    <p class="asset-note" id="cheapBody"></p>
+    <div class="row">
+      <label id="cheapThresholdLabel" for="cheapThreshold"></label>
+      <input class="threshold" id="cheapThreshold" type="number" min="1" max="90" step="1" value="20" inputmode="numeric">
+      <span id="cheapThresholdSuffix"></span>
+    </div>
+    <div class="row">
+      <button class="link" id="cheapGo" type="button"></button>
+    </div>
+    <p class="small" id="cheapMsg" role="status" style="margin:8px 0 0"></p>
+    <p class="small" style="margin:6px 0 0"><a id="cheapLink" target="_blank" rel="noopener" hidden></a></p>
+  </section>
+
+  <details class="more" id="today">
+    <summary id="todayEyebrow"></summary>
+    <p class="answer" id="answer"></p>
+    <p class="sub" id="answerSub"></p>
+    <p class="sub" id="dataStatus" role="status"></p>
+    <p class="source" id="paybackSource"></p>
+    <button class="link" id="manualNand" hidden></button>
+  </details>
+
+  <details class="more" id="newbieBasics">
+    <summary id="basicsTitle"></summary>
+    <p class="small" id="basicsContent"></p>
+    <div id="basicsNumbers"></div>
+    <p class="source" id="basicsSource"></p>
+  </details>
+
+  <details class="more" id="firstSteps">
+    <summary id="firstStepsTitle"></summary>
+    <p class="small" id="firstStepsNote"></p>
+    <nav class="official-links" aria-label="FabX official links">
+      <a id="officialHome" href="https://fabx.tech/" target="_blank" rel="noopener noreferrer"></a>
+      <a id="officialRigs" href="https://fabx.tech/en/circuits" target="_blank" rel="noopener noreferrer"></a>
+      <a id="officialNand" href="https://fabx.tech/en/market/0xbe6f94115d32f3ac3252bc4626573e739beeb714-0" target="_blank" rel="noopener noreferrer"></a>
+    </nav>
+    <p class="source" id="officialVerified"></p>
+  </details>
+
+  <button class="link" id="already"></button>
+
+  <details class="more" id="favorites">
+    <summary id="favoritesTitle"></summary>
+    <p class="asset-note" id="favoritesPrivacy"></p>
+    <div class="row">
+      <input id="favoriteAddr" aria-label="FabX address" autocomplete="off" spellcheck="false" placeholder="0x…">
+      <button type="button" class="link" id="favoriteAdd"></button>
+    </div>
+    <div class="row"><button type="button" class="link" id="favoriteCurrent"></button><button type="button" class="link" id="favoriteRefresh"></button></div>
+    <p class="small" id="favoriteMessage" role="status"></p>
+    <div id="favoriteRows" aria-live="polite"></div>
+  </details>
+
+  <details class="more" id="budgetSection">
+    <summary id="investQ"></summary>
+    <div class="chips" id="budgets"></div>
+    <p class="answer" style="font-size:18px;margin-top:14px" id="invest"></p>
+    <p class="sub" id="investSub"></p>
+    <p class="source" id="investSource"></p>
+  </details>
+
+  <details class="more" id="mineSection">
+    <summary id="mineQ"></summary>
+    <div id="mineIdle">
+      <div class="chips" id="chainChips" role="group" aria-label="Chain"></div>
+      <p class="small" id="chainNote" style="margin:8px 0 0"></p>
+      <button class="primary" id="mine"></button>
+      <div class="row" id="pasteRow" style="margin-top:10px" hidden>
+        <input id="addr" autocomplete="off" spellcheck="false">
+        <button class="link" id="go"></button>
+      </div>
+      <p class="small" style="margin:10px 0 0"><span id="readOnly"></span> · <button class="link" id="example"></button></p>
+    </div>
+    <p class="answer" style="font-size:18px" id="mineOut" hidden></p>
+    <p class="sub" id="mineSub" hidden></p>
+    <div class="asset-card" id="assetCard" hidden></div>
+    <div class="alert-box" id="alertBox" hidden>
+      <h3 id="alertTitle"></h3>
+      <p class="asset-note" id="alertBody"></p>
+      <div class="row" id="alertThresholdRow">
+        <label id="alertThresholdLabel" for="alertThreshold"></label>
+        <input class="threshold" id="alertThreshold" type="number" min="1" max="90" step="1" value="20" inputmode="numeric">
+        <span id="alertThresholdSuffix"></span>
+      </div>
+      <div class="row">
+        <button class="link" id="alertGo" type="button"></button>
+      </div>
+      <p class="small" id="alertMsg" role="status" style="margin:8px 0 0"></p>
+      <p class="small" style="margin:6px 0 0"><a id="alertBotLink" href="https://t.me/fabx_miner_desk_bot" target="_blank" rel="noopener" hidden></a></p>
+    </div>
+    <p class="err" id="werr" hidden></p>
+  </details>
+
+  <details class="more" id="entryBook" hidden>
+    <summary id="entryTop"></summary>
+    <p class="asset-note" id="entryCoverage"></p>
+    <p class="source" id="entryBookSource"></p>
+    <div id="entryListings"></div>
+    <details class="rig-list"><summary id="entryMethodTitle"></summary><p class="asset-note" id="entryMethod"></p></details>
+  </details>
+
+  <details class="more" id="more">
+    <summary id="moreLabel"></summary>
+    <p class="small" id="primer"></p>
+    <h3 id="netH"></h3>
+    <div class="kv" id="net"></div>
+    <p class="source" id="netSource"></p>
+    <h3 id="nandH"></h3>
+    <div class="row"><input id="nand" inputmode="decimal"><button class="link" id="apply"></button></div>
+    <h3 id="ruleH"></h3>
+    <label class="small"><input type="checkbox" id="ruleOn" style="flex:none"> <span id="ruleOnL"></span></label>
+    <div id="ruleBox" hidden>
+      <table><tbody id="ruleRows"></tbody></table>
+      <p class="small"><button class="link" id="ruleAdd"></button></p>
+    </div>
+    <h3 id="methodH"></h3>
+    <ul class="method" id="method"></ul>
+  </details>
+
+  </div>
+
+  <div class="feedback-box" id="feedbackBox">
+    <p class="small" id="fbTitle" style="margin:0 0 6px"></p>
+    <div class="row">
+      <input id="fbText" autocomplete="off" maxlength="500">
+      <button class="link" id="fbGo"></button>
+    </div>
+    <p class="small" id="fbMsg" role="status" style="margin:6px 0 0"></p>
+  </div>
+  <footer id="footer"></footer>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</main>
+
+<script type="module">
+import { snapshot, refreshOptional, wallet, assetCard, futureValue, networkGrowth, isAddress, CFG, tierFor, scenario, paybackFor, deadline, loadEntryComparison, rpc, batch, applyHistory } from '../desk.mjs';
+import { loadSlotDefense, slotBscSentences, slotBscSummary, slotLoadingLine, slotLoadingSummary, slotSentences, slotSummary } from '../slot-defense.mjs';
+import { crosschainLines, crosschainTitle, crosschainView, fabLegFromEntry, loadBemQuote, readOkxLast } from '../crosschain-yield.mjs';
+import { fetchServerMarket } from '../market-client.mjs';
+import { readPaybackContext, paybackScenarios } from '../fabx-payback.mjs';
+import { createFavorites, favoriteSummary, refreshFavorites } from '../fabx-favorites.mjs';
+import { diagnosisText } from '../fabx-diagnostics.mjs';
+import { podSnapshot, podAssetCard, podRigsForIds, podRigs, POD_CFG } from '../pod.mjs';
+import { BSC_ADDRESS_LOOKUP, fetchBscRigs } from '../bsc-rigs-client.mjs';
+import { buildAssetUrl, parseDeepLink, shareCardSpec, drawShareCard, shortAddress, isDeskEntryPath } from '../share.mjs';
+import { apiUrl } from '../api-url.mjs';
+import { normalizeSitePath } from '../site-path.mjs';
+import { RADAR_MORE, fetchRadar, radarCards, radarText } from '../radar-view.mjs';
+
+const BUDGETS = [100, 500, 2000];
+const T = {
+  zh: {
+    riskTitle: sealed => sealed === false ? '只读，不构成建议 · 挖矿合约未封存，产出可能被稀释'
+      : sealed === true ? '只读，不构成建议 · 合约已封存，升级权限未核验' : '只读，不构成建议 · 合约封存状态未取得',
+    riskDetailTitle: '风险详情',
+    riskText: '挖矿合约可升级；未封存时，团队可加处理器稀释产出。币价会波动，可能无法回本。本页只读，不构成建议。',
+    riskState: sealed => sealed ? '当前封存读数：是。升级权限未在本页核验。' : '当前挖矿合约：未封存。',
+    riskUnknown: '当前封存状态未取得，不能视为风险已解除。',
+    basicsTitle: '一分钟看懂 FabX',
+    basicsContent: 'FabX 是 X Layer 上的 TapeOut 社区挖矿项目。把电路做成链上 NFT、通过验证并开始挖矿后，按权重份额获得 FAB 奖励；并非每个电路 NFT 都已在挖矿。NAND 负责逻辑运算，LATCH 负责存储，都是构建电路的元件。烧掉元件造矿机后，元件不能拿回。',
+    basicsSource: '概念来源：FabX 官方「How to mine」与矿机市场说明；核验于 2026-10-19。',
+    basicsFab: 'FAB · 挖矿奖励代币，当前参考价', basicsMiners: '当前在挖矿机数',
+    basicsNand: 'NAND · 当前参考价', basicsLatch: 'LATCH · 价格未接入，显示未知（—）',
+    firstStepsTitle: '第一步怎么做 · 官方入口',
+    firstStepsNote: '先到官网了解规则，再查看市场与合约。以下仅为官方入口，不推荐买入；本站不会替你连接钱包、签名或交易。',
+    officialHome: 'FabX 官网 · 了解规则 ↗', officialRigs: '官方矿机市场 · 查看电路 ↗', officialNand: '官方 NAND 市场 · 查看元件 ↗',
+    officialVerified: '地址来自 FabX 官方站内导航，核验于 2026-10-19；无邀请或返佣参数。',
+    already: '已经有矿机？查看资产卡 ↓',
+    coreSource: (block, chainTime, priceTime) => `来源：X Layer 挖矿合约 / FAB-BEM 池，区块 ${block} · ${chainTime}；BEM 美元价 DexScreener、OKB 报价 OKX，读取于 ${priceTime}。`,
+    nandProvenance: (source, time) => `NAND 来源：${source} · ${time}。`,
+    modelSource: '此处回本与情景仍按当前价格和 Genesis 静态模型计算（假设已验证矿机排放 7,128 FAB/日，并非当前排放读数）；入场比价另用挂单同一区块的实际排放。预算和倍数是自选情景，未计后续稀释、建机费用和 gas。',
+    chainSource: (block, time) => `来源：X Layer 挖矿合约 · 区块 ${block} · ${time}`,
+    unavailableSource: '读数未取得',
+    entryTitle: '每 1 FAB/日的成本', entryRetry: '刷新比价', entryDetailTitle: '报价来源、费用与限制',
+    entryLoading: '正在完整扫描官方矿机挂单…', entryUnavailable: '入场比价暂时取不到，请稍后刷新。',
+    entryBuild: '建新机', entryBuy: '买现成 · 已测最低',
+    entryCheaper: (route, build, buy) => route === 'build' ? `建新机更便宜：${build} vs 买现成 ${buy} OKB` : `买现成更便宜：${buy} vs 建新机 ${build} OKB`,
+    entryEqual: '建新机与已测官方挂单的单位产出成本相同。',
+    entryUnknown: '产出或建机基准未取得，暂不能比较两条路。',
+    entryEmissionUnknown: '实际排放未取得，建机假设未核实，暂不能比较两条路。',
+    entryEmission: (rate, block) => `建机使用区块 ${block} 的已验证矿机实际排放：${rate} FAB/日。`,
+    entryEmpty: '本区块没有有效的官方矿机挂单。',
+    entryScope: '只覆盖官方市场，未含 Firsto 独立挂单。',
+    entryCosts: '未计建机费用和 gas。价格为官方市场直买价。',
+    entryTop: '单位产出成本最低的 5 台 · 可测挂单',
+    entryStamp: (block, time) => `区块 ${block} · ${time}`,
+    entryObservation: (block, time, minutes) => `来源：官方矿机市场 / 挖矿合约 · 区块 ${block} · ${time} · 产出观察 ${minutes} 分钟`,
+    entryCoverage: (scanned, valid, measured, unknown) => `完整扫描 ${scanned} 个编号 · ${valid} 条有效 · ${measured} 台可测 · ${unknown} 台未知，不参与排名`,
+    entryCached: age => `刷新失败，使用${age}的完整缓存；以下价格、基准和排名均为缓存时点。`,
+    entryRefreshing: '正在刷新；仍显示上一完整快照。', entryLive: '完整扫描完成，按可测挂单排序。',
+    entryPrice: '价格', entryDaily: 'FAB/日', entryApr: '静态毛年化', entryUnit: 'OKB / (FAB/日)',
+    entryRest: n => `其余 ${n} 条挂单`, entryUnknownRow: '未知 · 不参与排名',
+    entryReasons: { 'claimed-in-window': '窗口内领取 / 状态变动', 'changed-in-window': '窗口内权重或状态变化', unread: '历史或当前读数不可用', stopped: '本窗口无产出', 'rate-mismatch': '差分与当前速率不符' },
+    entryMethodTitle: '口径与限制',
+    entryMethod: '日产 = 两个区块的 pendingWithDeweb 差值 × 86400 ÷ 实际间隔秒数；历史状态缺失、uint256.max、领取或速率核对失败均标未知。单位成本 = 官方直买价 ÷ 日产；静态毛年化 = 日产 × FAB 的 OKB 价 × 365 ÷ 买价，未扣待领余额。建机按挂单同一区块的 currentRate 和 unverifiedBps 计算已验证矿机实际排放，计入新增权重稀释，算出日产 1 FAB 所需 NAND；排放读不到则标假设未核实，不判断哪条路更便宜。实际用量须取整数、取决于电路和卖盘深度。币价、难度、加成和挂单都可能变化，不是买入建议。',
+    entryNand: (qty, price) => `建机参考 ${qty} NAND × ${price} OKB；`,
+    entryNandCached: age => `NAND 使用${age}的缓存报价。`, entryNandManual: 'NAND 使用手动价格。',
+    appTitle: 'FabX 矿机面板', description: '今天要不要给 FabX 加算力？现读 X Layer 链上数据，只读工具。',
+    readError: () => '网络或链上数据暂不可用',
+    deviation: (dev) => `${dev >= 0 ? '高' : '低'} ${Math.abs(dev).toFixed(1)}%`,
+    nandSources: { ask: (qty) => `链上最低卖价 · 该价位 ${qty} NAND`, cached: (hours, qty) => `缓存成交均价 · 近 ${hours} 小时 · ${qty} NAND`, unknown: '来源未确认' },
+    amountOkb: (value) => `${value} OKB`, amountFab: (value) => `${value} FAB`, money: (value) => `$${value}`,
+    futurePrice: (mult) => `${mult}× FAB`, dayPeriod: (days) => `${days} 天`,
+    rigSummary: (n, s) => `${n} 台：正常 ${s.mining} · 停了 ${s.stopped} · 本窗口领取 ${s['claimed-in-window']} · 读不到 ${s.unread}`,
+    rigLoadingSummary: (n) => `${n} 台：读取中 ${n}`,
+    rigToggle: (n, open) => `${open ? '收起' : '展开'}全部 ${n} 台`,
+    lang: 'English', todayEyebrow: '现在进场值不值？再看回本', investQ: '预算情景 · 点选金额试算', mineQ: '我的矿机 · X Layer 和 BSC TapeOut',
+    loading: '正在读链上数据…', failed: (m) => `读取失败：${m}。刷新页面重试。`,
+    timedOut: '网络读取超时，请重试或稍后再查',
+    answer: (pb) => `按固定排放与当前价格的静态情景，现在烧 NAND 加算力约 <span class="num">${pb} 天</span>回本。`,
+    answerNoNand: (price) => `FAB 当前价格 $${price}。NAND 价格未取得，回本暂不可算。`,
+    answerSub: (dev, apr, sealed) => (dev == null ? '' : `FAB 现价比 24 小时中位价${dev}。`) + (apr == null ? '' : `静态年化约 ${apr}，会随全网算力增长下降。`) + (sealed ? '' : '<br><span class="warn">合约未封存，团队还能加处理器，进一步稀释没算进去。</span>'),
+    manualNand: '手动填写 NAND 价格', investNoNand: '填入 NAND 价格后可计算预算情景。',
+    historyLabel: '24h 中位价 / 区间', nandLabel: 'NAND 市场价',
+    optionalPending: '正在后台读取，不影响其他数据。', optionalUnavailable: '暂时取不到，稍后自动重试',
+    cachedAge: (age) => `使用 ${age}的缓存`, cacheUnknownAge: '时间未知',
+    cacheAge: (minutes) => minutes < 1 ? '不到 1 分钟前' : minutes < 60 ? `${Math.floor(minutes)} 分钟前` : minutes < 1440 ? `${Math.floor(minutes / 60)} 小时前` : `${Math.floor(minutes / 1440)} 天前`,
+    staleCore: (age) => `当前价格与全网数据刷新失败；仍显示 ${age}的数据。稍后自动重试。`,
+    manualSource: '使用手动 NAND 价格。', crossCheck: (diff) => `池状态价与最近成交价相差 ${diff}%（读取时间点不同）。`,
+    walletFailed: (m) => `矿机读取失败：${m}。其他数据仍可使用，可再次点击查询。`,
+    invest: (fab, usd, pb) => `每天多挖 <span class="num">${fab}</span> FAB（约 $${usd}），<span class="num">${pb}</span> 天回本。`,
+    investSub: (a, b, c, d) => `FAB 价格变成 0.5 倍 / 2 倍 / 5 倍时：${a} / ${b} / ${c} 天回本（全网算力不变）。全网算力翻倍、价格不变时：${d} 天。没算流片手续费和网络费。`,
+    mine: '查看我的矿机', mineConnecting: '正在连接钱包…', go: '查询', addrPh: '粘贴钱包地址 0x…',
+    readOnly: '只读，不签名', example: '没有矿机？看个示例',
+    noWallet: '没检测到钱包插件，粘贴地址也行：', rejected: '你取消了连接，粘贴地址也行：', badAddr: '地址格式不对，应为 0x 开头的 42 位。',
+    scanning: '正在查找你的矿机…', measuring: '矿机已确认，正在读取产出；数值随后填入…',
+    nandPrice: (price, source, age) => `NAND：${price} OKB · ${source}${age ? ` · ${age}` : ''}`,
+    noRigs: '这个地址名下没有 FabX 矿机。',
+    noRigsBsc: '这个地址名下没有 TapeOut / Behemoth 电路。',
+    chainFabx: 'FabX · X Layer', chainBsc: 'BSC TapeOut', chainAria: '选择链',
+    chainNoteFabx: '这边是 X Layer 上的 FabX 矿机，日产按 FAB 算。',
+    chainNoteBsc: '这边是币安链上的 TapeOut 矿机，日产按 BEM 算；停了的会单独标出来。',
+    navBoard: '看板',
+    podCoreSource: (block, chainTime, priceTime) => `来源：BSC 挖矿合约，区块 ${block} · ${chainTime}；BEM 美元价 DexScreener（BSC 池），读取于 ${priceTime}。`,
+    podChainSource: (block, time) => `来源：BSC 挖矿合约 · 区块 ${block} · ${time}`,
+    amountBem: (value) => `${value} BEM`,
+    rigOptimal: '最优首创', rigVerified: '已验证池', rigUnverified: '未验证池',
+    mineOut: (n) => `${n} 台矿机`,
+    mineOutBsc: (n) => `${n} 台电路`,
+    minePartial: (verified, expected) => `已确认 ${verified}/${expected} 台矿机`,
+    discoveryPartial: '矿机列表尚不完整；总览只覆盖已确认矿机，可重试查询。', retryMine: '重试查询',
+    pendingTotal: (value, n, m) => `待领总额 ${value} FAB（${n}/${m} 台）`,
+    pendingTotalBem: (value, n, m) => `待领总额 ${value} BEM（${n}/${m} 台）`,
+    pendingSubtotal: (value, n, m) => `已读待领小计 ${value} FAB（${n}/${m} 台）`,
+    pendingSubtotalBem: (value, n, m) => `已读待领小计 ${value} BEM（${n}/${m} 台）`,
+    pendingUnknown: (n, m) => `待领奖励未知（${n}/${m} 台已读）`,
+    exampleDisclosure: '公开示例地址、非作者持仓；读数为区块历史快照。',
+    mineSub: (pending, share, denom) => `${pending} · 占已验证池日产 ${share}%（分母 ${denom} FAB/日）`,
+    assetH: '我的矿机资产卡', assetValue: '产能成本参考', assetOutput: '每天产出', assetApr: '静态年化', assetPayback: '回本天数', days: '天', perDay: '每天',
+    assetBasis: '按边际 NAND 价折算的产能成本参考，不等于 NFT 转售价或原始投入。静态年化未计全网增长；动态回本另见三档情景。均未扣手续费和网络费。',
+    chainBscSoon: 'TapeOut（BSC）即将支持',
+    indexBuilding: '索引建设中',
+    indexUpdated: (time) => `持有人索引更新于 ${time}`,
+    rigBem: 'BEM/天',
+    mineSubBsc: (pending, share) => `${pending} · 占已验证池日产 ${share}%`,
+    futureUnknown: '全网权重增速未取得，未来产出估值显示 —。',
+    assetSourcesTitle: '估值来源与时间',
+    assetCoverage: (measured, total, minutes) => `近 ${minutes} 分钟：${total} 台中 ${measured} 台可测，总览与未来产出只合计这些矿机。`,
+    assetStamp: (block, time) => `来源：X Layer 挖矿合约 pendingWithDeweb · 区块 ${block} · ${time}`,
+    assetUnknown: '日产按最近约 10 分钟的实时奖励折算，与入场比价同口径。显示 — 的矿机这段时间读不准（刚领取过或数据缺失），不计入、不外推。',
+    assetNoNand: 'NAND 价格未取得，资产价值、年化和回本暂不可算。',
+    rigH: '每台矿机', rigId: '编号', rigFab: 'FAB/天', rigNand: 'NAND 当量', rigValue: '价值', rigStatus: '状态',
+    rigStatuses: { mining: '正常', stopped: '停了', revoked: '已撤销', 'claimed-in-window': '本窗领取', 'changed-in-window': '本窗状态变化', 'rate-mismatch': '速率不符', unread: '读不到', loading: '读取中…' },
+    futureH: '未来产出估值 · 美元', futureDays: '期间',
+    futureLoading: '正在读取约 7 天前的全网权重，测算每日增速…',
+    futureMeasured: (growth) => `全网权重增速：按约 7 天链上变化实测，平均每天 ${growth}%。`,
+    futureBasis: '按上述增速逐日稀释产出，FAB 价格固定为现价的 0.5× / 1× / 2×；是未来挖出 FAB 的估值，不是矿机转售价或收益保证。',
+    other: '换个地址',
+    alertTitle: '这个地址有变动时提醒我',
+    alertBody: '矿机停了、被取消、转手，或实测日产大跌，会在 Telegram 告诉你。看 X Layer 就盯 FabX，看币安链就盯 TapeOut。X Layer 还会按你填的比例，一起打开便宜矿机提醒。不用填用户名：点按钮，到 Telegram 里点「开始」就订好。链接 30 分钟内有效，只能用一次。内测免费。本站只读，不连钱包、不签名。点开始之后，才会把这个地址和这条链存到服务器。',
+    alertThresholdLabel: '比自建便宜至少', alertThresholdSuffix: '% 时也提醒',
+    alertGo: '用 Telegram 订阅', alertSending: '正在生成订阅链接…',
+    alertOk: 'Telegram 应该已经打开。在对话里点「开始」就订好了。没打开的话，点下面的链接。',
+    alertBotLink: '点这里在 Telegram 完成订阅',
+    alertBadThreshold: '比例要填 1 到 90 的整数。20 表示比自建便宜两成及以上才提醒。',
+    alertLimit: '这个账号登记的地址已达上限。',
+    alertFail: '生成订阅链接失败，请稍后重试。镜像站点可能不支持。',
+    cheapTitle: '便宜矿机提醒',
+    cheapBody: '官方市场上，买现成矿机有时比自己建便宜。设一个比例，达到了就在 Telegram 告诉你是哪一台、多少钱、便宜多少、购买链接。每条挂单只说一次；下架或卖掉不再说。不用填用户名：点按钮，到 Telegram 里点「开始」就订好。链接 30 分钟内有效，只能用一次。不连钱包，不签名。',
+    cheapThresholdLabel: '比自建便宜至少', cheapThresholdSuffix: '% 时提醒',
+    cheapGo: '用 Telegram 订阅',
+    ruleSays: (s) => `按你的收割规则，今天领出来的 FAB 卖 ${s}。`, ruleHold: '按你的收割规则，今天只领不卖。',
+    since: (parts, ago) => `距你上次来（${ago}）：${parts}`, ago: (h) => h < 48 ? `${Math.round(h)} 小时前` : `${Math.round(h / 24)} 天前`,
+    sFab: (x) => `FAB ${x >= 0 ? '涨' : '跌'} ${Math.abs(x).toFixed(1)}%`, sNet: (x) => `全网算力 ${x >= 0 ? '+' : ''}${x.toFixed(1)}%`,
+    moreLabel: '更多',
+    primer: '矿机按权重份额获得 FAB；新增算力会稀释既有份额。短时产出、静态年化与回本均不保证未来收益。',
+    netH: '全网', nandH: 'NAND 价（OKB），留空用链上最低卖价', apply: '重算', nandPh: '自动',
+    ruleH: '我的收割规则（可选）', ruleOnL: '启用后，首页会显示「今天卖多少」', ruleAdd: '加一档',
+    ruleRow: '现价 ≥ 中位价', ruleSell: '时卖',
+    methodH: '计算口径',
+    method: [
+      '当前价格与全网数据从 X Layer 链上和公开行情直接读取，不经过本站服务器。24h 行情和 NAND 报价在后台读取；最近成功数据只缓存在此浏览器，回退时标明缓存年龄。',
+      '使用统计：每次打开页面记一次匿名计数（随机浏览器编号、页面、语言、来源网站域名），不记录 IP、浏览器标识或钱包地址；开启「请勿追踪」(Do Not Track) 时不统计。',
+      '回本天数 = NAND 美元价 ÷ 1 个 NAND 每天挖到的美元，按边际算（多烧的这份也会增加全网算力），不含后来者稀释。静态年化 = 365 ÷ 回本天数。',
+      'FAB 价格：直接读取 FAB/BEM Uniswap v4 池 Slot0 状态 × BEM 美元价；有成交日志时与最近成交价交叉核对。24 小时中位价取每笔成交后的池子价格。',
+      'NAND 价：直接读取 FabX 市场全部卖单，取 NAND 最低有效卖价；显示同价可用数量和观测区块年龄。这是边际重置成本参考，整仓不保证能按此价格成交。',
+      '矿机产出：两个区块的 pendingWithDeweb 实时奖励差值 × 86400 ÷ 实际间隔秒数（约 10 分钟），与入场比价共用读法。uint256.max、窗口内领取、历史缺失或状态/速率核对失败标未知，不外推。短时日产不保证未来产出。',
+    ],
+    kv: { fab: 'FAB', median: 'FAB 24h 中位', range: 'FAB 24h 区间', bem: 'BEM', okb: 'OKB', nand: 'NAND', cap: '多挖每天 1 FAB 的成本', net: '全网算力（NAND 当量）', miners: '当前在挖矿机数', sealed: '合约封存', yes: '是', no: '否，团队仍可加处理器', nandSrc: (h, q) => `近 ${h}h ${q.toLocaleString()} 个` },
+    footer: '只读工具：不连钱包也能用，不签名、不发交易。数据有延迟，不是投资建议。',
+    navStart: '入门', navLinks: '生态入口', navCheck: '查验', navFaq: '常见问题',
+    fbTitle: '反馈：缺什么、哪里不对，一句话告诉我们（不用登录）。', fbPh: '例如：想看 BSC 上 TapeOut 的矿机', fbGo: '发送',
+    fbSending: '发送中…', fbOk: '收到，谢谢。能修的会直接修。', fbEmpty: '写一句再发。', fbFail: '发送失败，请稍后重试；镜像站点可能不支持。',
+    shareBtn: '分享快照', shareSave: '保存图片', shareCopy: '复制链接', shareCopied: '链接已复制', shareFail: '分享失败，请重试',
+  },
+  en: {
+    riskTitle: sealed => sealed === false ? 'Read-only, no advice · Unsealed; output may dilute'
+      : sealed === true ? 'Read-only, no advice · Sealed; upgrades unchecked' : 'Read-only, no advice · Seal state unknown',
+    riskDetailTitle: 'Risk details',
+    riskText: 'The mining contract is upgradeable. While unsealed, the team can add processors and dilute output. Token prices fluctuate; costs may never be recovered. This page is read-only, not investment advice.',
+    riskState: sealed => sealed ? 'Current seal read: yes. Upgrade permissions are not checked here.' : 'Mining contract currently unsealed.',
+    riskUnknown: 'Current seal state unavailable; this does not mean the risks are gone.',
+    basicsTitle: 'Understand FabX in a minute',
+    basicsContent: 'FabX is a TapeOut community mining project on X Layer. A circuit becomes an on-chain NFT; after verification and starting mining, it earns FAB according to its weight share. Not every circuit NFT is already mining. NAND provides logic and LATCH provides storage; both are circuit components. Components burned to build a rig cannot be recovered.',
+    basicsSource: 'Definitions: official FabX “How to mine” and circuit market documentation; checked 2026-10-19.',
+    basicsFab: 'FAB · mining reward token, reference price', basicsMiners: 'Miners currently mining',
+    basicsNand: 'NAND · reference price', basicsLatch: 'LATCH · price not available in this desk (—)',
+    firstStepsTitle: 'First steps · Official destinations',
+    firstStepsNote: 'Read the rules on the official site, then inspect markets and contracts. These are official destinations, not a buying recommendation. This desk will not connect a wallet, sign or trade on your behalf.',
+    officialHome: 'FabX website · Read the rules ↗', officialRigs: 'Official rig market · View circuits ↗', officialNand: 'Official NAND market · View components ↗',
+    officialVerified: 'URLs checked against FabX navigation on 2026-10-19; no referral or affiliate parameters.',
+    already: 'Already own rigs? View your asset card ↓',
+    coreSource: (block, chainTime, priceTime) => `Sources: X Layer mining contract / FAB-BEM pool, block ${block} · ${chainTime}; BEM USD from DexScreener and OKB quote from OKX, read at ${priceTime}.`,
+    nandProvenance: (source, time) => `NAND source: ${source} · ${time}.`,
+    modelSource: 'Payback and scenarios here retain current prices and the static Genesis model (assumed verified emission of 7,128 FAB/day, not a current emission read). Entry comparison separately uses actual emission at the listing block. Budgets and multipliers are user scenarios; later dilution, build fees and gas are excluded.',
+    chainSource: (block, time) => `Source: X Layer mining contract · Block ${block} · ${time}`,
+    unavailableSource: 'Read unavailable',
+    entryTitle: 'Cost per 1 FAB/day', entryRetry: 'Refresh comparison', entryDetailTitle: 'Quote sources, fees and limits',
+    entryLoading: 'Scanning the complete official rig market…', entryUnavailable: 'Temporarily unavailable. Refresh the comparison later.',
+    entryBuild: 'Building new', entryBuy: 'Existing rig · lowest measured',
+    entryCheaper: (route, build, buy) => route === 'build' ? `Build costs less: ${build} vs existing ${buy} OKB` : `Existing costs less: ${buy} vs new ${build} OKB`,
+    entryEqual: 'Building new and the lowest measured official listing have equal unit cost.',
+    entryUnknown: 'Output or build baseline is unavailable; the two routes cannot be compared yet.',
+    entryEmissionUnknown: 'Actual emission is unavailable; the build assumption is unverified, so the two routes cannot be compared.',
+    entryEmission: (rate, block) => `Build uses actual verified-miner emission at block ${block}: ${rate} FAB/day.`,
+    entryEmpty: 'No valid official rig listings at this block.',
+    entryScope: 'Official market only. Firsto independent listings excluded.',
+    entryCosts: 'Build fees and gas excluded. Official market direct price.',
+    entryTop: '5 lowest unit costs · measurable listings',
+    entryStamp: (block, time) => `Block ${block} · ${time}`,
+    entryObservation: (block, time, minutes) => `Sources: official rig market / mining contract · Block ${block} · ${time} · ${minutes}-minute output window`,
+    entryCoverage: (scanned, valid, measured, unknown) => `Complete scan: ${scanned} IDs · ${valid} valid · ${measured} measured · ${unknown} unknown, excluded from ranking`,
+    entryCached: age => `Refresh failed. Using complete cached data from ${age}; all prices, baseline and ranks retain that snapshot.`,
+    entryRefreshing: 'Refreshing; still showing the previous complete snapshot.', entryLive: 'Complete scan; ranked among measurable listings.',
+    entryPrice: 'Price', entryDaily: 'FAB/day', entryApr: 'Static gross APR', entryUnit: 'OKB / (FAB/day)',
+    entryRest: n => `${n} more listings`, entryUnknownRow: 'Unknown · excluded from ranking',
+    entryReasons: { 'claimed-in-window': 'Claimed / state changed in window', 'changed-in-window': 'Weight or state changed in window', unread: 'Historical or current reads unavailable', stopped: 'No output in window', 'rate-mismatch': 'Delta differs from current rate' },
+    entryMethodTitle: 'Method and limits',
+    entryMethod: 'Daily output = pendingWithDeweb difference × 86400 / actual seconds between blocks. Missing historical state, uint256.max, claims and failed rate checks are unknown. Unit cost = official direct price / daily output. Static gross APR = daily output × FAB price in OKB × 365 / price; pending balances are not deducted. The build model uses currentRate and unverifiedBps at the same block as listings to derive actual verified-miner emission, includes dilution from added weight and solves for 1 FAB/day. Missing emission leaves the assumption unverified and no cheaper-route verdict is given. Actual NAND must be an integer and depends on the circuit and ask depth. Prices, difficulty, boosts and listings can change. No buying recommendation.',
+    entryNand: (qty, price) => `Build reference: ${qty} NAND × ${price} OKB;`,
+    entryNandCached: age => `NAND uses a cached quote from ${age}.`, entryNandManual: 'NAND uses your manual price.',
+    appTitle: 'FabX Miner Desk', description: 'Should I add hashpower to FabX today? One answer, read live from X Layer. Read-only.',
+    readError: (e) => e?.message || 'Network or chain data unavailable',
+    deviation: (dev) => `${Math.abs(dev).toFixed(1)}% ${dev >= 0 ? 'above' : 'below'}`,
+    nandSources: { ask: (qty) => `On-chain best ask · ${qty} NAND at this price`, cached: (hours, qty) => `Cached fill VWAP · ${hours}h · ${qty} NAND`, unknown: 'Source unconfirmed' },
+    amountOkb: (value) => `${value} OKB`, amountFab: (value) => `${value} FAB`, money: (value) => `$${value}`,
+    futurePrice: (mult) => `${mult}× FAB`, dayPeriod: (days) => `${days} days`,
+    rigSummary: (n, s) => `${n} rigs: ${s.mining} OK · ${s.stopped} stopped · ${s['claimed-in-window']} claimed · ${s.unread} unread`,
+    rigLoadingSummary: (n) => `${n} rigs: ${n} reading`,
+    rigToggle: (n, open) => `${open ? 'Hide' : 'Show'} all ${n} rigs`,
+    lang: '中文', todayEyebrow: 'Entering now? Check payback next', investQ: 'Budget scenarios · Tap an amount', mineQ: 'My rigs · X Layer and BSC TapeOut',
+    loading: 'Reading the chain…', failed: (m) => `Couldn't load: ${m}. Refresh to retry.`,
+    timedOut: 'Network read timed out; please retry now or later',
+    answer: (pb) => `At a static scenario with fixed emission and current prices, burning NAND for hashpower pays back in about <span class="num">${pb} days</span>.`,
+    answerNoNand: (price) => `FAB is $${price} now. NAND price is unavailable, so payback cannot be calculated yet.`,
+    answerSub: (dev, apr, sealed) => (dev == null ? '' : `FAB is ${dev} its 24h median. `) + (apr == null ? '' : `Static APR about ${apr}, falling as network hashpower grows.`) + (sealed ? '' : '<br><span class="warn">Contract not sealed: the team can still add processors; that extra dilution is not included.</span>'),
+    manualNand: 'Enter a NAND price manually', investNoNand: 'Enter a NAND price to calculate budget scenarios.',
+    historyLabel: '24h median / range', nandLabel: 'NAND market price',
+    optionalPending: 'Loading in the background; other data is ready.', optionalUnavailable: 'Temporarily unavailable; retrying automatically.',
+    cachedAge: (age) => `Using cached data from ${age}`, cacheUnknownAge: 'an unknown time',
+    cacheAge: (minutes) => minutes < 1 ? 'less than 1 minute ago' : minutes < 60 ? `${Math.floor(minutes)} minutes ago` : minutes < 1440 ? `${Math.floor(minutes / 60)} hours ago` : `${Math.floor(minutes / 1440)} days ago`,
+    staleCore: (age) => `Current prices and network data could not refresh; still showing data from ${age}. Retrying automatically.`,
+    manualSource: 'Using your manual NAND price.', crossCheck: (diff) => `Pool state and last swap prices differ by ${diff}% (read at different times).`,
+    walletFailed: (m) => `Couldn't read rigs: ${m}. Other data is still usable; click to retry.`,
+    invest: (fab, usd, pb) => `You'd mine <span class="num">${fab}</span> more FAB a day (about $${usd}) and pay back in <span class="num">${pb}</span> days.`,
+    investSub: (a, b, c, d) => `If FAB goes to 0.5× / 2× / 5×: ${a} / ${b} / ${c} days to pay back (network unchanged). If network hashpower doubles at today's price: ${d} days. Tape-out fees and gas not included.`,
+    mine: 'Check my rigs', mineConnecting: 'Connecting wallet…', go: 'Look up', addrPh: 'Paste a wallet address 0x…',
+    readOnly: 'Read-only, no signing', example: 'No rigs? See an example',
+    noWallet: 'No wallet extension found. Paste an address instead:', rejected: 'Connection cancelled. Paste an address instead:', badAddr: 'Not a valid address (0x + 40 characters).',
+    scanning: 'Finding your rigs…', measuring: 'Rigs confirmed; reading output. Numbers will fill in shortly…',
+    nandPrice: (price, source, age) => `NAND: ${price} OKB · ${source}${age ? ` · ${age}` : ''}`,
+    noRigs: 'This address holds no FabX rigs.',
+    noRigsBsc: 'This address holds no TapeOut / Behemoth circuits.',
+    chainFabx: 'FabX · X Layer', chainBsc: 'BSC TapeOut', chainAria: 'Chain',
+    chainNoteFabx: 'These are FabX rigs on X Layer. Daily output is in FAB.',
+    chainNoteBsc: 'These are TapeOut rigs on BNB Chain. Daily output is in BEM, and stopped rigs are marked.',
+    navBoard: 'Board',
+    podCoreSource: (block, chainTime, priceTime) => `Sources: BSC mining contract, block ${block} · ${chainTime}; BEM USD from DexScreener (BSC pair), read at ${priceTime}.`,
+    podChainSource: (block, time) => `Source: BSC mining contract · block ${block} · ${time}`,
+    amountBem: (value) => `${value} BEM`,
+    rigOptimal: 'optimal', rigVerified: 'verified pool', rigUnverified: 'unverified pool',
+    mineOut: (n) => `${n} rigs`,
+    mineOutBsc: (n) => `${n} circuits`,
+    minePartial: (verified, expected) => `Confirmed ${verified}/${expected} rigs`,
+    discoveryPartial: 'Rig discovery is incomplete. Summary covers confirmed rigs only; retry to check again.', retryMine: 'Retry lookup',
+    pendingTotal: (value, n, m) => `Total pending: ${value} FAB (${n}/${m} rigs)`,
+    pendingTotalBem: (value, n, m) => `Total pending: ${value} BEM (${n}/${m} circuits)`,
+    pendingSubtotal: (value, n, m) => `Read pending subtotal: ${value} FAB (${n}/${m} rigs)`,
+    pendingSubtotalBem: (value, n, m) => `Read pending subtotal: ${value} BEM (${n}/${m} circuits)`,
+    pendingUnknown: (n, m) => `Pending rewards unknown (${n}/${m} rigs read)`,
+    exampleDisclosure: 'Public example address, not the author’s holdings; figures are a historical block snapshot.',
+    mineSub: (pending, share, denom) => `${pending} · ${share}% of verified-pool daily output (denominator ${denom} FAB/day)`,
+    assetH: 'My rig asset card', assetValue: 'Capacity cost reference', assetOutput: 'Daily output', assetApr: 'Static APR', assetPayback: 'Payback', days: 'days', perDay: 'per day',
+    chainBscSoon: 'TapeOut (BSC) coming soon',
+    indexBuilding: 'BSC rig index is still building',
+    indexUpdated: (time) => `Holder index updated ${time}`,
+    rigBem: 'BEM/day',
+    mineSubBsc: (pending, share) => `${pending} · ${share}% of verified-pool daily output`,
+    futureUnknown: 'Network growth was not measured; future output estimates show —.',
+    assetBasis: 'Marginal NAND replacement-cost reference for capacity, not an NFT resale quote or original cost. Static APR excludes network growth; dynamic payback uses the three scenarios below. Both exclude fees and gas.',
+    assetSourcesTitle: 'Valuation sources and times',
+    assetCoverage: (measured, total, minutes) => `${measured} of ${total} rigs measurable over ${minutes} minutes. Summary and future output include only these rigs.`,
+    assetStamp: (block, time) => `Source: X Layer mining contract pendingWithDeweb · Block ${block} · ${time}`,
+    assetUnknown: 'Daily output uses live rewards over about the last ten minutes, same as entry comparison. Rigs shown as — could not be measured (just claimed or data missing) and are excluded, never extrapolated.',
+    assetNoNand: 'NAND price unavailable: value, APR and payback cannot be calculated yet.',
+    rigH: 'Per rig', rigId: 'ID', rigFab: 'FAB/day', rigNand: 'NAND-eq.', rigValue: 'Value', rigStatus: 'Status',
+    rigStatuses: { mining: 'Mining', stopped: 'Stopped', revoked: 'Revoked', 'claimed-in-window': 'Claimed', 'changed-in-window': 'State changed', 'rate-mismatch': 'Rate mismatch', unread: 'Unread', loading: 'Reading…' },
+    futureH: 'Future output value · USD', futureDays: 'Period',
+    futureLoading: 'Reading network weight about 7 days ago to measure daily growth…',
+    futureMeasured: (growth) => `Network weight growth measured on chain over about 7 days: ${growth}% daily average.`,
+    futureBasis: 'Output is diluted daily at this growth rate, with FAB held at 0.5× / 1× / 2× today’s price. Values cover future FAB output, not rig resale or guaranteed returns.',
+    other: 'Try another address',
+    alertTitle: 'Tell me when this address changes',
+    alertBody: 'Telegram tells you if a rig here stops, is removed, is transferred, or its measured daily output drops sharply. X Layer watches FabX; BNB Chain watches TapeOut. On X Layer the same tap also turns on cheap-rig alerts at the percent you set. No username: tap the button, then tap Start in Telegram. The link works for 30 minutes and only once. Free during the beta. This site stays read-only and never asks you to connect a wallet or sign. The address and chain are stored only after you tap Start.',
+    alertThresholdLabel: 'Also alert when at least', alertThresholdSuffix: '% cheaper than building',
+    alertGo: 'Subscribe with Telegram', alertSending: 'Creating the subscribe link…',
+    alertOk: 'Telegram should be open. Tap Start in the chat to finish. If it did not open, use the link below.',
+    alertBotLink: 'Tap here to finish in Telegram',
+    alertBadThreshold: 'Enter an integer from 1 to 90. 20 means alert when a listing is at least 20% cheaper than building.',
+    alertLimit: 'This account has reached the address limit.',
+    alertFail: 'Could not submit the subscribe link. Try again later. Mirror copies may not support it.',
+    cheapTitle: 'Cheap rig alerts',
+    cheapBody: 'On the official market, a ready-made rig is sometimes cheaper than building one. Set a percent. When a listing is at least that much cheaper, Telegram tells you which rig, the price, how much cheaper, and the buy link. Each listing is sent once. Delisted or sold listings are not sent again. No username: tap the button, then tap Start in Telegram. The link works for 30 minutes and only once. No wallet, no signature.',
+    cheapThresholdLabel: 'Alert when at least', cheapThresholdSuffix: '% cheaper than building',
+    cheapGo: 'Subscribe with Telegram',
+    ruleSays: (s) => `Your harvest rule: sell ${s} of today's claimed FAB.`, ruleHold: 'Your harvest rule: claim, sell nothing today.',
+    since: (parts, ago) => `Since your last visit (${ago}): ${parts}`, ago: (h) => h < 48 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)} days ago`,
+    sFab: (x) => `FAB ${x >= 0 ? 'up' : 'down'} ${Math.abs(x).toFixed(1)}%`, sNet: (x) => `network hashpower ${x >= 0 ? '+' : ''}${x.toFixed(1)}%`,
+    moreLabel: 'More',
+    primer: 'Rigs earn FAB by weight share. Added hashpower dilutes existing shares. Short-window output, static APR and payback do not guarantee future returns.',
+    netH: 'Network', nandH: 'NAND price (OKB), empty = on-chain best ask', apply: 'Recalculate', nandPh: 'auto',
+    ruleH: 'My harvest rule (optional)', ruleOnL: 'When on, the top shows how much to sell today', ruleAdd: 'Add a row',
+    ruleRow: 'Spot ≥ median ×', ruleSell: 'sell',
+    methodH: 'Method',
+    method: [
+      'Current prices and network data are read directly from X Layer and public price APIs, not through our server. The 24h history and NAND quote load in the background; last good values are cached only in this browser and labelled with their age when used.',
+      'Usage stats: one anonymous count per page load (random browser id, page, language, referring site name). No IP, user agent or wallet address is recorded; nothing is sent when Do Not Track is on.',
+      'Payback = NAND in USD ÷ USD one NAND mines per day, at the margin (your burn adds to network hashpower too), without dilution from later miners. Static APR = 365 ÷ payback days.',
+      'FAB price: live FAB/BEM Uniswap v4 pool Slot0 state × BEM in USD, cross-checked against the last swap when logs are available. The 24h median is over post-trade pool prices.',
+      'NAND price: the lowest live NAND ask in the complete on-chain FabX ask book, with quantity at that price and the observation block age. A marginal replacement-cost reference, not an executable price for the whole portfolio.',
+      'Rig output: pendingWithDeweb live-reward difference × 86400 / actual seconds between two blocks (about ten minutes), using the same reader as entry comparison. uint256.max, claims, missing history and failed state/rate checks stay unknown. Short-window output does not guarantee future production.',
+    ],
+    kv: { fab: 'FAB', median: 'FAB 24h median', range: 'FAB 24h range', bem: 'BEM', okb: 'OKB', nand: 'NAND', cap: 'Cost of +1 FAB/day', net: 'Network hashpower (NAND-eq.)', miners: 'Miners currently mining', sealed: 'Contract sealed', yes: 'yes', no: 'no, team can add processors', nandSrc: (h, q) => `${q.toLocaleString()} in ${h}h` },
+    footer: 'Read-only: works without a wallet, never signs or sends. Data can lag. Not investment advice.',
+    navStart: 'Start', navLinks: 'Links', navCheck: 'Rig check', navFaq: 'FAQ',
+    fbTitle: 'Feedback: what is missing or wrong, in one line (no login).', fbPh: 'e.g. show TapeOut rigs on BSC too', fbGo: 'Send',
+    fbSending: 'Sending…', fbOk: 'Got it, thanks. Fixable things get fixed.', fbEmpty: 'Write a line first.', fbFail: 'Could not send; try again later. Mirror copies may not support it.',
+    shareBtn: 'Share snapshot', shareSave: 'Save image', shareCopy: 'Copy link', shareCopied: 'Link copied', shareFail: 'Share failed; try again',
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let lang = store.get('fmd.lang') || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+let chain = store.get('fmd.chain') === 'bsc' ? 'bsc' : 'fabx';
+let L = T[lang];
+const f = (x, d = 2) => x == null || !isFinite(x) ? '—' : Number(x).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const pct = (x, d = 0) => (x * 100).toFixed(d) + '%';
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const show = (id, on) => { $(id).hidden = !on; };
+
+let snap = null, podSnap = null, walletRes = null, walletAddr = null, budget = Number(store.get('fmd.budget')) || 500;
+let walletRequest = 0, loadRequest = 0, coreLoad = null, loadError = null;
+let coreController = null, walletController = null, walletExpiresAt = 0;
+let walletPending = false, backgroundDeferred = false;
+let entryResult = null, entryController = null, entryLoading = false, entryExpanded = false;
+let bemQuote = null, bnbUsdt = null, crossController = null;
+let slotById = new Map(), slotOpen = new Set(), slotState = 'idle', slotGeneration = 0, slotController = null;
+let rigsExpanded = false;
+let pendingRigId = null;
+let walletMessage = null, sinceVisit = null;
+const errorText = e => e?.name === 'TimeoutError' ? L.timedOut : L.readError(e);
+function setWalletMessage(key, error = null) {
+  walletMessage = { key, error };
+  $('werr').textContent = error ? L[key](errorText(error)) : L[key];
+}
+let optionalController = null, retryTimer = null, staleCore = false;
+const OPTIONAL_RETRY_MS = 60_000;
+const growthCache = new Map();
+const paybackCache = new Map();
+const favorites = createFavorites({ storage: (() => { try { return localStorage; } catch { return null; } })() });
+const favoriteResults = new Map();
+const favoriteAttempts = new Map();
+let favoritesController = null, favoriteNotice = null;
+let assetPaybackExpanded = false;
+const featureText = () => lang === 'zh' ? {
+  payback: '动态回本 · 乐观 / 中性 / 保守', names: ['乐观', '中性', '保守'],
+  unknown: '无法判断：缺少增速、减半、分池产出或价格数据，显示 —。',
+  horizon: '10 年内未回本', basis: '三档分别取实测近 7 日、近 3 日分池日复合增速的最小值、均值、最大值，按实际区块时间计算。负增速保留，收益最多为对应池全部排放；缺排放上限则不算。读取失败不当作零增长。固定现价、自身权重与加成，分池逐日稀释；未来变化不作保证。',
+  halving: '减半情景按链上 startTime 与 HALVING_PERIOD 排期，每周期产出减半；起算排期是模型假设，未声称核实合约内部实现。下次情景减半：',
+  costs: '未扣手续费、网络费；不计出售矿机或待领余额。',
+  assetBasis: '成本使用可测产能的边际 NAND 重置成本参考，不是原始投入或转售价。',
+  buyBasis: '买机采用卖方当前短窗产出，转让后加成可能变化。',
+  favorites: '本机收藏 · 多地址总览', privacy: '收藏列表只存本机，不上传本站服务器。查询使用公共 RPC；关页后不持续监测。',
+  add: '收藏地址', current: '收藏当前地址', refresh: '刷新总览', remove: '移除', select: '切换',
+  empty: '尚未收藏地址。', loading: '读取中…', error: '读取失败，无法判断',
+  invalid: '请输入有效地址（0x + 40 位）。', saved: '已保存在本机。', storage: '本机存储不可用，仅本次页面有效。', limit: '收藏已达上限。',
+  summary: s => `${f(s.circuits, 0)} 台${s.discoveryComplete ? '' : '（仅已确认，持有总数 ' + f(s.expected, 0) + '）'} · 可测日产 ${f(s.fabPerDay, 4)} FAB（${f(s.measured, 0)} 台） · ${f(s.anomalies, 0)} 台异常 · ${f(s.unknown, 0)} 台状态无法判断`,
+  diagnosis: '挖不了排查', diagnosticUnknown: '无法判断：链上状态或排查字段未读到。',
+} : {
+  payback: 'Dynamic payback · Optimistic / Neutral / Conservative', names: ['Optimistic', 'Neutral', 'Conservative'],
+  unknown: 'Cannot determine: growth, halving, pool output or prices unavailable; showing —.',
+  horizon: 'Not recovered within 10 years', basis: 'Scenarios use the minimum, mean and maximum of measured 7-day and 3-day compound daily growth for each pool, with actual block timestamps. Negative growth is retained, capped at the entire pool emission; a missing cap prevents that projection. Missing reads never mean zero growth. Price, rig weight and boosts stay fixed; pool dilution compounds daily. Future changes are not guaranteed.',
+  halving: 'Halving scenario uses on-chain startTime and HALVING_PERIOD, halving output each period. The schedule origin is a model assumption, not verified contract internals. Next modeled halving: ',
+  costs: 'Excludes fees and gas; no rig resale or pending rewards are credited.',
+  assetBasis: 'Cost is the marginal NAND replacement reference for measurable capacity, not original investment or resale value.',
+  buyBasis: 'Buy scenarios use the seller’s current short-window output; boosts may change on transfer.',
+  favorites: 'Local favorites · Address overview', privacy: 'Favorites stay in this browser and are not uploaded to our server. Reads use public RPC; monitoring stops when this page closes.',
+  add: 'Save address', current: 'Save current address', refresh: 'Refresh overview', remove: 'Remove', select: 'Switch',
+  empty: 'No saved addresses yet.', loading: 'Reading…', error: 'Read failed; cannot determine',
+  invalid: 'Enter a valid address (0x + 40 characters).', saved: 'Saved in this browser.', storage: 'Browser storage unavailable; saved only for this page session.', limit: 'Favorite limit reached.',
+  summary: s => `${f(s.circuits, 0)} rigs${s.discoveryComplete ? '' : ' (confirmed only; expected ' + f(s.expected, 0) + ')'} · Measurable output ${f(s.fabPerDay, 4)} FAB/day (${f(s.measured, 0)} rigs) · ${f(s.anomalies, 0)} anomalies · ${f(s.unknown, 0)} unknown`,
+  diagnosis: 'Mining troubleshooting', diagnosticUnknown: 'Cannot determine: chain status or diagnostic fields unavailable.',
+};
+
+function renderFavorites() {
+  const text = featureText(), addresses = favorites.list();
+  $('favoritesTitle').textContent = `${text.favorites} (${addresses.length})`;
+  $('favoritesPrivacy').textContent = text.privacy;
+  for (const [id, label] of [['favoriteAdd', 'add'], ['favoriteCurrent', 'current'], ['favoriteRefresh', 'refresh']]) $(id).textContent = text[label];
+  $('favoriteCurrent').disabled = chain !== 'fabx' || !walletAddr;
+  $('favoriteMessage').textContent = favoriteNotice ? text[favoriteNotice] : '';
+  $('favoriteRows').innerHTML = addresses.length ? addresses.map(address => {
+    const item = favoriteResults.get(address);
+    const summary = item?.status === 'ready' ? text.summary(item.summary) : item?.status === 'error' || loadError ? text.error : text.loading;
+    return `<article class="entry-row"><div class="row"><button type="button" class="link" data-favorite="${address}" title="${address}">${text.select} ${shortAddress(address)}</button><button type="button" class="ghost" data-remove="${address}">${text.remove}</button></div><p>${esc(summary)}</p>${item?.wallet?.head != null ? `<p>${esc(L.assetStamp(f(item.wallet.head, 0), observationTime(item.wallet.blockTimestamp ? item.wallet.blockTimestamp * 1000 : null)))}</p>` : ''}</article>`;
+  }).join('') : `<p class="small">${text.empty}</p>`;
+  $('favoriteRows').querySelectorAll('[data-favorite]').forEach(button => { button.onclick = () => switchFavorite(button.dataset.favorite); });
+  $('favoriteRows').querySelectorAll('[data-remove]').forEach(button => { button.onclick = () => {
+    const result = favorites.remove(button.dataset.remove);
+    favoriteNotice = result.saved ? null : 'storage';
+    favoriteResults.delete(button.dataset.remove);
+    favoriteAttempts.delete(button.dataset.remove);
+    favoritesController?.abort(); favoritesController = null;
+    renderFavorites(); startFavorites();
+  }; });
+}
+
+function switchFavorite(address) {
+  chain = 'fabx'; store.set('fmd.chain', chain);
+  return lookup(address);
+}
+
+function addFavorite(address) {
+  const result = favorites.add(address);
+  favoriteNotice = result.ok ? result.saved ? 'saved' : 'storage' : isAddress(address) ? 'limit' : 'invalid';
+  renderFavorites();
+  if (result.ok) { $('favoriteAddr').value = ''; startFavorites(); }
+}
+
+async function startFavorites() {
+  if (!snap || walletPending || favoritesController) return;
+  const current = snap;
+  const addresses = favorites.list().filter(address => favoriteAttempts.get(address) !== current.head);
+  if (!addresses.length) return;
+  const controller = new AbortController(); favoritesController = controller;
+  try {
+    await refreshFavorites(addresses, {
+      signal: controller.signal,
+      readWallet: address => wallet(address, current, () => {}, { signal: controller.signal, apiCandidates: false }),
+      onUpdate: item => {
+        if (controller.signal.aborted || snap?.head !== current.head || !favorites.list().includes(item.address)) return;
+        favoriteAttempts.set(item.address, current.head);
+        favoriteResults.set(item.address, item); renderFavorites();
+      },
+    });
+  } catch { /* Aborted overview yields to the selected address. */ }
+  finally { if (favoritesController === controller) {
+    favoritesController = null;
+    // Include addresses added during this scan or a newer head, without retrying
+    // a failed address endlessly at the same head.
+    if (!controller.signal.aborted) startFavorites();
+  } }
+}
+
+function paybackContextFor(observation) {
+  if (!observation?.head) return null;
+  const key = observation.head;
+  if (!paybackCache.has(key) && !walletPending) {
+    const controller = new AbortController(), entry = { result: null, controller };
+    paybackCache.set(key, entry);
+    // Separate optional budget: history cannot spend the selected wallet's deadline.
+    deadline(signal => readPaybackContext({ ...observation, blockTime: observation.blockTime ?? snap?.blockTime }, { rpc, batch, signal }), 12000, controller.signal)
+      .catch(() => null).then(result => {
+        if (paybackCache.get(key) !== entry) return;
+        entry.result = result; entry.controller = null;
+        renderEntry(); if (walletRes && !walletPending) renderMine();
+      });
+    if (paybackCache.size > 4) {
+      const oldest = paybackCache.keys().next().value;
+      paybackCache.get(oldest)?.controller?.abort(); paybackCache.delete(oldest);
+    }
+  }
+  return paybackCache.get(key)?.result ?? null;
+}
+
+function outputPoolShares(rigs) {
+  let verified = 0, unverified = 0, total = 0;
+  for (const rig of rigs) {
+    if (!(rig.fabPerDay > 0)) continue;
+    const shares = rig.poolShares;
+    if (!shares || !Number.isFinite(shares.verified) || !Number.isFinite(shares.unverified)
+        || Math.abs(shares.verified + shares.unverified - 1) > 1e-6) return null;
+    verified += rig.fabPerDay * shares.verified; unverified += rig.fabPerDay * shares.unverified; total += rig.fabPerDay;
+  }
+  return total > 0 ? { verified: verified / total, unverified: unverified / total } : null;
+}
+
+function paybackRows({ cost, dailyRevenue, poolShares, context, tokenPrice, basis = '' }) {
+  const text = featureText();
+  const poolDailyRevenue = tokenPrice > 0 && context?.emissionFabPerDay ? {
+    verified: context.emissionFabPerDay.verified * tokenPrice,
+    unverified: context.emissionFabPerDay.unverified * tokenPrice,
+  } : null;
+  const result = paybackScenarios({ cost, dailyRevenue, poolShares, context, poolDailyRevenue });
+  const value = scenario => scenario?.status === 'beyond-horizon' ? text.horizon
+    : scenario?.days != null ? `${f(scenario.days, 1)} ${L.days}` : '—';
+  return `<div class="asset-summary">${['optimistic', 'neutral', 'conservative'].map((name, i) => `<div class="asset-stat"><span>${text.names[i]}</span><strong>${esc(value(result.scenarios?.[name]))}</strong></div>`).join('')}</div>`
+    + `<p class="asset-note">${esc(basis)} ${esc(text.basis)} ${esc(text.costs)}</p>`
+    + (result.status === 'unknown' ? `<p class="asset-note">${text.unknown}</p>` : '')
+    + `<p class="source">${esc(text.halving)}${esc(observationTime(context?.halving?.nextTimestamp ? context.halving.nextTimestamp * 1000 : null))}</p>`
+    + (context?.windows ?? []).map(window => `<p class="source">${window.days}d · #${f(window.fromBlock, 0)} → #${f(context.head, 0)} · ${f(window.elapsedDays, 3)}d · ${lang === 'zh' ? '已验证 / 未验证 日增速' : 'Verified / unverified daily growth'} ${f(window.pools?.verified?.dailyGrowth == null ? null : window.pools.verified.dailyGrowth * 100, 4)}% / ${f(window.pools?.unverified?.dailyGrowth == null ? null : window.pools.unverified.dailyGrowth * 100, 4)}%</p>`).join('');
+}
+
+function assetPaybackBasis() {
+  const pricesAt = observationTime(snap?.prices?.asOf ?? snap?.asOf);
+  const measuredAt = observationTime(walletRes?.blockTimestamp ? walletRes.blockTimestamp * 1000 : null);
+  return featureText().assetBasis + (lang === 'zh'
+    ? ` 日产及增速基于区块 ${f(walletRes?.head, 0)}（${measuredAt}）；成本与收入金额按 ${pricesAt} 的现价重估，NAND 报价时间 ${observationTime(snap?.availability?.nand?.asOf)}。`
+    : ` Output and growth use block ${f(walletRes?.head, 0)} (${measuredAt}); cost and revenue are repriced at ${pricesAt}, with NAND quoted at ${observationTime(snap?.availability?.nand?.asOf)}.`);
+}
+
+function rigDiagnosis(rig) {
+  if (rig.status === 'loading' || (rig.chainStatus === 1 && rig.pool === 'verified')) return '';
+  const text = featureText();
+  const messages = rig.diagnoses?.length ? rig.diagnoses.map(item => diagnosisText(item, lang)) : [text.diagnosticUnknown];
+  return `<details class="rig-list rig-diagnosis"><summary>${text.diagnosis}</summary>${messages.map(message => `<p class="asset-note">${esc(message)}</p>`).join('')}</details>`;
+}
+
+function rememberSlotOpen() {
+  const card = $('assetCard');
+  if (!card?.querySelectorAll) return;
+  for (const el of card.querySelectorAll('details.slot-defense')) {
+    const id = el.getAttribute?.('data-rig');
+    if (!id) continue;
+    if (el.open) slotOpen.add(id);
+    else slotOpen.delete(id);
+  }
+}
+
+function slotMarkup(rig) {
+  if (walletRes?.loading) return '';
+  if (chain === 'bsc') {
+    const id = String(rig.id);
+    const open = slotOpen.has(id) ? ' open' : '';
+    return `<details class="slot-defense rig-list" data-rig="${esc(id)}"${open}><summary>${esc(slotBscSummary(lang))}</summary><p class="asset-note">${esc(slotBscSentences(lang)[0])}</p></details>`;
+  }
+  const id = String(rig.id);
+  const row = slotById.get(id);
+  const open = slotOpen.has(id) ? ' open' : '';
+  const summary = row ? slotSummary(row, lang) : slotLoadingSummary(lang);
+  const lines = row
+    ? slotSentences(row, lang)
+    : (slotState === 'loading' ? [slotLoadingLine(lang)] : slotSentences({ role: 'unread' }, lang));
+  return `<details class="slot-defense rig-list" data-rig="${esc(id)}"${open}><summary>${esc(summary)}</summary>${lines.map(line => `<p class="asset-note">${esc(line)}</p>`).join('')}</details>`;
+}
+
+function prepareSlot(request) {
+  slotController?.abort();
+  const generation = ++slotGeneration;
+  slotById = new Map();
+  if (chain !== 'fabx' || !walletRes || walletRes.loading) {
+    slotState = 'idle';
+    return;
+  }
+  const head = Number.isSafeInteger(walletRes.head) ? walletRes.head : (Number.isSafeInteger(snap?.head) ? snap.head : null);
+  if (head == null) { slotState = 'unavailable'; return; }
+  slotState = 'loading';
+  const controller = new AbortController();
+  slotController = controller;
+  const ids = (walletRes.rigs || []).map(rig => rig.id);
+  loadSlotDefense(ids, head, { rpc, signal: controller.signal }).then(result => {
+    if (generation !== slotGeneration || request !== walletRequest || controller.signal.aborted) return;
+    slotState = result?.state === 'ready' ? 'ready' : 'unavailable';
+    slotById = new Map((result?.rows || []).map(row => [String(row.id), row]));
+    if (request === walletRequest && walletRes) renderMine();
+  }).catch(error => {
+    if (error?.name === 'AbortError' || generation !== slotGeneration || request !== walletRequest) return;
+    slotState = 'unavailable';
+    slotById = new Map();
+    if (request === walletRequest && walletRes) renderMine();
+  });
+}
+let rule = (() => { try { return JSON.parse(store.get('fmd.rule')) || { on: false, rows: [] }; } catch { return { on: false, rows: [] }; } })();
+const saveRule = () => store.set('fmd.rule', JSON.stringify(rule));
+
+function applyStatic() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = L.appTitle;
+  document.querySelector?.('meta[name="description"]')?.setAttribute('content', L.description);
+  $('appTitle').textContent = L.appTitle;
+  for (const id of ['navStart', 'navLinks', 'navCheck', 'navFaq', 'navBoard', 'alertTitle', 'alertBody', 'alertThresholdLabel', 'alertThresholdSuffix', 'alertGo', 'alertBotLink', 'cheapTitle', 'cheapBody', 'cheapThresholdLabel', 'cheapThresholdSuffix', 'cheapGo', 'lang', 'todayEyebrow', 'investQ', 'mineQ', 'mine', 'go', 'readOnly', 'example', 'moreLabel', 'primer', 'netH', 'nandH', 'apply', 'ruleH', 'ruleOnL', 'ruleAdd', 'methodH', 'footer', 'manualNand', 'entryTitle', 'entryRetry', 'entryScope', 'entryCosts', 'entryTop', 'entryMethodTitle', 'entryMethod', 'entryDetailTitle', 'riskDetailTitle', 'riskText', 'basicsTitle', 'basicsContent', 'basicsSource', 'firstStepsTitle', 'firstStepsNote', 'officialHome', 'officialRigs', 'officialNand', 'officialVerified', 'already', 'fbTitle', 'fbGo']) $(id).textContent = L[id];
+  $('fbText').placeholder = L.fbPh;
+  $('cheapLink').textContent = L.alertBotLink;
+  show('cheapBox', chain !== 'bsc');
+  show('alertThresholdRow', chain !== 'bsc');
+  if (!$('cheapThreshold').value) $('cheapThreshold').value = '20';
+  if (!$('alertThreshold').value) $('alertThreshold').value = '20';
+  renderFeedbackMsg();
+  $('addr').placeholder = L.addrPh; $('nand').placeholder = L.nandPh;
+  renderAlertMsg();
+  renderCheapMsg();
+  $('method').innerHTML = L.method.map((m) => `<li>${m}</li>`).join('');
+  $('budgets').innerHTML = BUDGETS.map((b) => `<button class="chip" data-b="${b}" aria-pressed="${b === budget}">$${b.toLocaleString()}</button>`).join('');
+  $('budgets').querySelectorAll('.chip').forEach((c) => { c.onclick = () => { budget = Number(c.dataset.b); store.set('fmd.budget', budget); applyStatic(); renderInvest(); }; });
+  $('crosschainTitle').textContent = crosschainTitle(lang);
+  $('chainChips').setAttribute('aria-label', L.chainAria);
+  const chip = (key, label) => `<button type="button" class="chip" data-chain="${key}" aria-pressed="${chain === key}">${esc(label)}</button>`;
+  $('chainChips').innerHTML = chip('fabx', L.chainFabx) + chip('bsc', L.chainBsc);
+  $('chainNote').textContent = chain === 'bsc' ? L.chainNoteBsc : L.chainNoteFabx;
+  $('chainChips').querySelectorAll('[data-chain]').forEach((button) => {
+    button.onclick = () => {
+      const next = button.getAttribute('data-chain') === 'bsc' ? 'bsc' : 'fabx';
+      if (next === chain) return;
+      chain = next;
+      store.set('fmd.chain', chain);
+      walletRequest++;
+      walletController?.abort();
+      walletPending = false;
+      walletRes = null;
+      walletAddr = null;
+      show('mineOut', false); show('mineSub', false); show('assetCard', false); show('werr', false);
+      applyStatic();
+      render();
+    };
+  });
+  renderFavorites();
+}
+
+function exampleWallet() {
+  return chain === 'bsc' ? POD_CFG.exampleWallet : CFG.exampleWallet;
+}
+
+function podSnapshotSource(snap) {
+  return L.podCoreSource(f(snap?.head, 0), observationTime(snap?.headTimestamp ? snap.headTimestamp * 1000 : null), observationTime(snap?.asOf));
+}
+
+function tokenLabel() {
+  return chain === 'bsc' ? L.amountBem : L.amountFab;
+}
+
+function cacheAge(asOf) {
+  const time = Date.parse(asOf);
+  return Number.isFinite(time) ? L.cacheAge(Math.max(0, (Date.now() - time) / 60000)) : L.cacheUnknownAge;
+}
+
+function availabilityNote(key) {
+  const entry = snap?.availability?.[key];
+  if (!entry || entry.state === 'live' || entry.state === 'skipped') return '';
+  if (entry.state === 'manual') return L.manualSource;
+  const label = key === 'history' ? L.historyLabel : L.nandLabel;
+  if (entry.state === 'pending') return `${label}: ${L.optionalPending}`;
+  const cached = entry.state === 'cached' ? ` · ${L.cachedAge(cacheAge(entry.asOf))}` : '';
+  return `${label}: ${L.optionalUnavailable}${cached}`;
+}
+
+function nandSourceText() {
+  if (snap.availability?.nand?.state === 'manual') return L.manualSource;
+  const quote = snap.decision.nandQuote;
+  if (quote?.kind === 'onchain-ask') return L.nandSources.ask(f(quote.qty, 0));
+  if (quote?.hours) return L.nandSources.cached(f(quote.hours, 0), f(quote.qty, 0));
+  return L.nandSources.unknown;
+}
+
+function nandPriceNote() {
+  if (!snap?.decision.nandOkb) return '';
+  const manual = snap.availability?.nand?.state === 'manual';
+  return L.nandPrice(f(snap.decision.nandOkb, 7), nandSourceText(),
+    manual ? '' : cacheAge(snap.availability?.nand?.asOf));
+}
+
+function observationTime(value) {
+  const date = value == null ? null : new Date(value);
+  return date && Number.isFinite(date.getTime()) ? date.toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-GB', { timeZoneName: 'short' }) : L.cacheUnknownAge;
+}
+
+function snapshotSource() {
+  return L.coreSource(f(snap?.head, 0), observationTime(snap?.headTimestamp ? snap.headTimestamp * 1000 : null), observationTime(snap?.asOf));
+}
+
+function nandProvenance() {
+  const state = snap?.availability?.nand;
+  const source = !snap?.decision.nandOkb ? L.unavailableSource : state?.state === 'manual' ? L.manualSource
+    : (state?.state === 'cached' ? L.cachedAge(cacheAge(state.asOf)) + ' · ' : '') + nandSourceText();
+  return L.nandProvenance(source, observationTime(state?.asOf));
+}
+
+function renderNewbie() {
+  const chain = L.chainSource(f(snap?.head, 0), observationTime(snap?.headTimestamp ? snap.headTimestamp * 1000 : null));
+  $('riskTitle').textContent = L.riskTitle(snap?.network.sealed);
+  $('riskState').textContent = (typeof snap?.network.sealed === 'boolean' ? L.riskState(snap.network.sealed) : L.riskUnknown)
+    + (snap ? ' ' + chain : '')
+    + (staleCore ? ' ' + L.staleCore(cacheAge(snap?.asOf)) : '');
+  const number = (label, value, provenance) => `<p class="basics-number">${esc(label)}: <b>${esc(value)}</b><small>${esc(provenance)}</small></p>`;
+  $('basicsNumbers').innerHTML = number(L.basicsFab, snap?.prices.fabUsd == null ? '—' : L.money(f(snap.prices.fabUsd, 4)), snapshotSource())
+    + number(L.basicsMiners, f(snap?.network.miners, 0), chain)
+    + number(L.basicsNand, snap?.decision.nandOkb == null ? '—' : L.amountOkb(f(snap.decision.nandOkb, 7)), nandProvenance())
+    + `<p class="basics-number">${esc(L.basicsLatch)}</p>`
+    + (staleCore ? `<p class="source">${esc(L.staleCore(cacheAge(snap?.asOf)))}</p>` : '');
+  const sources = [snapshotSource(), nandProvenance(), L.modelSource].join(' ');
+  $('paybackSource').textContent = sources;
+  $('investSource').textContent = sources;
+  $('netSource').textContent = sources + (availabilityNote('history') ? ' ' + availabilityNote('history') : '');
+}
+
+function render() {
+  renderNewbie();
+  renderEntry();
+  renderFavorites();
+  if (walletMessage) setWalletMessage(walletMessage.key, walletMessage.error);
+  if (sinceVisit) renderSince();
+  if (!snap) {
+    $('answer').textContent = loadError ? L.failed(errorText(loadError)) : L.loading;
+    $('answerSub').textContent = ''; $('dataStatus').textContent = '';
+    $('invest').textContent = loadError ? '—' : L.loading; $('investSub').textContent = '';
+    $('net').textContent = ''; show('manualNand', false); show('assetCard', false); show('alertBox', false);
+    return;
+  }
+  const { prices: p, network: n, decision: d } = snap;
+  const pb = d.paybackDays;
+  const dev = d.ratio == null ? null : (d.ratio - 1) * 100;
+  const devTxt = dev == null ? null : L.deviation(dev);
+  $('answer').innerHTML = pb == null ? L.answerNoNand(f(p.fabUsd, 4)) : L.answer(f(pb, 0));
+  const t = rule.on && d.ratio != null && Number.isFinite(d.ratio) ? tierFor(d.ratio, rule.rows) : null;
+  $('answerSub').innerHTML = L.answerSub(devTxt, pb == null ? null : pct(365 / pb), n.sealed) + (t ? `<br><b>${t.sell ? L.ruleSays(pct(t.sell, 1)) : L.ruleHold}</b>` : '');
+  const notes = ['history', 'nand'].map(availabilityNote).filter(Boolean);
+  if (staleCore) notes.unshift(L.staleCore(cacheAge(snap.asOf)));
+  if (p.crossCheck?.state === 'different') notes.push(L.crossCheck(f(p.crossCheck.relativeDifference * 100, 1)));
+  $('dataStatus').textContent = notes.join(' · ');
+  show('manualNand', d.nandOkb == null);
+  renderInvest();
+  renderMine();
+  const k = L.kv;
+  const nandAge = snap.availability?.nand?.asOf ? ` · ${cacheAge(snap.availability.nand.asOf)}` : '';
+  const historyWhen = snap.availability?.history?.state === 'live' && snap.availability.history.asOf
+    ? ` <span class="small">(${esc(observationTime(snap.availability.history.asOf))})</span>` : '';
+  $('net').innerHTML = [
+    [k.fab, '$' + f(p.fabUsd, 4)], [k.median, p.anchorUsd == null ? '—' : '$' + f(p.anchorUsd, 4) + historyWhen], [k.range, p.lowUsd == null ? '—' : `$${f(p.lowUsd, 4)} – $${f(p.highUsd, 4)}${historyWhen}`],
+    [k.bem, '$' + f(p.bemUsd, 2)], [k.okb, '$' + f(p.okbUsd, 2)],
+    [k.nand, d.nandOkb ? `${f(d.nandOkb, 5)} OKB <span class="small">(${esc(nandSourceText() + nandAge)})</span>` : '—'], [k.cap, d.okbPerFabDay ? `${f(d.okbPerFabDay, 3)} OKB` : '—'],
+    [k.net, f(n.networkNand, 0)], [k.miners, n.miners.toLocaleString()], [k.sealed, n.sealed ? k.yes : k.no],
+  ].map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('');
+  renderRule();
+}
+
+function renderCrosschain() {
+  const view = crosschainView({
+    fab: fabLegFromEntry(entryResult),
+    bem: bemQuote,
+    prices: {
+      okbUsdt: snap?.prices?.okbUsd ?? null,
+      bnbUsdt,
+      bemPerFab: snap?.prices?.fabBem ?? null,
+    },
+  });
+  $('crosschainTitle').textContent = crosschainTitle(lang);
+  $('crosschainBody').innerHTML = crosschainLines(view, lang).map(line => `<p class="asset-note">${esc(line)}</p>`).join('');
+}
+
+async function startCrosschain(request) {
+  crossController?.abort();
+  const controller = new AbortController();
+  crossController = controller;
+  bemQuote = null;
+  bnbUsdt = null;
+  renderCrosschain();
+  try {
+    const [bnb, bem] = await Promise.all([
+      readOkxLast('BNB-USDT', globalThis.fetch, controller.signal).catch(() => null),
+      loadBemQuote({ signal: controller.signal }).catch(error => {
+        if (error?.name === 'AbortError') throw error;
+        return { complete: false, reason: 'unread', method: null };
+      }),
+    ]);
+    if (request !== loadRequest || controller.signal.aborted) return;
+    bnbUsdt = bnb;
+    bemQuote = bem;
+  } catch (error) {
+    if (error?.name === 'AbortError' || request !== loadRequest) return;
+    bemQuote = bemQuote || { complete: false, reason: 'unread', method: null };
+  } finally {
+    if (crossController === controller) crossController = null;
+    if (request === loadRequest && !controller.signal.aborted) renderCrosschain();
+  }
+}
+
+function renderEntry() {
+  renderCrosschain();
+  $('entryPaybackTitle').textContent = featureText().payback;
+  $('entryPaybackRows').innerHTML = paybackRows({});
+  const result = entryResult, ready = result && ['live', 'cached'].includes(result.state);
+  $('entryRetry').disabled = entryLoading || !snap;
+  show('entryBook', !!ready);
+  if (!ready) {
+    $('entryAnswer').textContent = result?.state === 'unavailable' || loadError ? L.entryUnavailable : L.entryLoading;
+    $('entryValues').innerHTML = ''; $('entryListings').innerHTML = '';
+    $('entryStamp').textContent = ''; $('entryObservation').textContent = ''; $('entryStatus').textContent = ''; $('entryFreshness').textContent = ''; $('entrySources').textContent = '';
+    show('entryFreshness', false);
+    return;
+  }
+  const { baseline, ranked = [], unknown = [] } = result;
+  const cheapest = ranked[0];
+  const buildCost = baseline?.okbPerFabDay, buyCost = cheapest?.okbPerFabDay;
+  // Keep the short headline distinct when two prices round to the same cent.
+  let digits = 2;
+  while (digits < 15 && buildCost !== buyCost && f(buildCost, digits) === f(buyCost, digits)) digits++;
+  const emissionUnknown = baseline?.emissionVerified !== true;
+  $('entryAnswer').textContent = emissionUnknown ? L.entryEmissionUnknown : result.cheaper === 'build' || result.cheaper === 'listing'
+    ? L.entryCheaper(result.cheaper, f(buildCost, digits), f(buyCost, digits))
+    : result.cheaper === 'equal' ? L.entryEqual : result.validCount === 0 ? L.entryEmpty : L.entryUnknown;
+  $('entryValues').innerHTML = [[L.entryBuild, baseline?.okbPerFabDay], [L.entryBuy, cheapest?.okbPerFabDay]]
+    .map(([label, value]) => `<div class="asset-stat"><span>${esc(label)}</span><strong>${f(value, 4)}</strong><small>${L.entryUnit}</small></div>`).join('');
+  const time = result.blockTimestamp ? new Date(result.blockTimestamp * 1000) : new Date(result.asOf);
+  $('entryStamp').textContent = L.entryStamp(f(result.head, 0), Number.isFinite(time.getTime())
+    ? time.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : L.cacheUnknownAge);
+  $('entryObservation').textContent = L.entryObservation(f(result.head, 0), observationTime(time), f(result.windowSeconds == null ? null : result.windowSeconds / 60, 1));
+  const provenance = baseline?.nandState === 'cached' ? L.entryNandCached(cacheAge(baseline.nandAsOf)) : baseline?.nandState === 'manual' ? L.entryNandManual : '';
+  $('entryFreshness').textContent = [emissionUnknown ? L.entryEmissionUnknown : '', result.state === 'cached' ? L.entryCached(cacheAge(result.asOf)) : entryLoading ? L.entryRefreshing : '', provenance].filter(Boolean).join(' ');
+  show('entryFreshness', !!$('entryFreshness').textContent);
+  $('entryStatus').textContent = [result.state === 'cached' ? L.entryCached(cacheAge(result.asOf)) : entryLoading ? L.entryRefreshing : L.entryLive,
+    baseline?.okbPerFabDay == null ? '' : L.entryNand(f(baseline.nandRequired, 2), f(baseline.nandOkb, 7)), provenance].filter(Boolean).join(' ');
+  $('entryCoverage').textContent = L.entryCoverage(f(result.totalScanned, 0), f(result.validCount, 0), f(ranked.length, 0), f(unknown.length, 0));
+  const nandSource = baseline?.nandOkb == null ? L.unavailableSource : baseline.nandState === 'manual' ? L.manualSource
+    : [provenance, baseline.nandQuote?.kind === 'onchain-ask' ? L.nandSources.ask(f(baseline.nandQuote.qty, 0))
+      : baseline.nandQuote?.hours ? L.nandSources.cached(f(baseline.nandQuote.hours, 0), f(baseline.nandQuote.qty, 0)) : L.nandSources.unknown].filter(Boolean).join(' ');
+  $('entrySources').textContent = L.coreSource(f(result.head, 0), observationTime(result.blockTimestamp ? result.blockTimestamp * 1000 : null), observationTime(result.priceAsOf))
+    + ' ' + L.nandProvenance(nandSource, observationTime(baseline?.nandAsOf))
+    + ' ' + (emissionUnknown ? L.entryEmissionUnknown : L.entryEmission(f(baseline.emissionFabPerDay, 6), f(result.head, 0)));
+  $('entryBookSource').textContent = $('entryObservation').textContent + ' ' + $('entrySources').textContent;
+  const row = (rig, measured) => {
+    const url = `https://fabx.tech/c/${CFG.circuits}/${encodeURIComponent(rig.id)}`;
+    return `<article class="entry-row"><div class="row"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">#${esc(rig.id)} ↗</a><strong>${measured ? f(rig.okbPerFabDay, 4) : '—'}</strong></div>
+      <p>${L.entryPrice} ${f(rig.priceOkb, 5)} OKB · ${f(rig.fabPerDay, 4)} ${L.entryDaily}</p>
+      <p>${measured ? `${L.entryUnit} · ${L.entryApr} ${rig.apr == null ? '—' : pct(rig.apr, 1)}` : `${L.entryUnknownRow} · ${esc(L.entryReasons[rig.status] || L.entryReasons.unread)}`}</p>
+      ${rigDiagnosis(rig)}</article>`;
+  };
+  const context = paybackContextFor({ head: result.head, headTimestamp: result.blockTimestamp });
+  $('entryPaybackRows').innerHTML = `<h3>${esc(L.entryBuild)}</h3>`
+    + paybackRows({ cost: baseline?.okbPerFabDay, dailyRevenue: result.fabOkb, poolShares: { verified: 1, unverified: 0 }, context, tokenPrice: result.fabOkb })
+    + `<h3>${esc(L.entryBuy)}</h3>`
+    + paybackRows({ cost: cheapest?.priceOkb, dailyRevenue: result.fabOkb > 0 && cheapest?.fabPerDay > 0 ? cheapest.fabPerDay * result.fabOkb : null,
+      poolShares: cheapest?.poolShares, context, tokenPrice: result.fabOkb, basis: featureText().buyBasis });
+  entryExpanded = $('entryAll')?.open ?? entryExpanded;
+  const rest = [...ranked.slice(5).map(rig => row(rig, true)), ...unknown.map(rig => row(rig, false))];
+  $('entryListings').innerHTML = ranked.slice(0, 5).map(rig => row(rig, true)).join('') + (rest.length
+    ? `<details class="rig-list" id="entryAll"${entryExpanded ? ' open' : ''}><summary>${L.entryRest(rest.length)}</summary>${rest.join('')}</details>` : '');
+}
+
+async function startEntry(request) {
+  if (request !== loadRequest || !snap || staleCore) return;
+  if (walletPending) { backgroundDeferred = true; return; }
+  entryController?.abort();
+  const controller = new AbortController(); entryController = controller;
+  entryLoading = true; renderEntry();
+  try {
+    const result = await loadEntryComparison(snap, { signal: controller.signal });
+    if (request === loadRequest && !controller.signal.aborted) entryResult = result;
+  } catch (error) {
+    if (request === loadRequest && !controller.signal.aborted) entryResult = entryResult && ['live', 'cached'].includes(entryResult.state)
+      ? { ...entryResult, state: 'cached', error: error.message } : { state: 'unavailable' };
+  } finally {
+    if (entryController === controller) { entryController = null; entryLoading = false; renderEntry(); }
+  }
+}
+
+function renderInvest() {
+  if (!snap?.decision.nandOkb) { $('invest').textContent = L.investNoNand; $('investSub').textContent = ''; return; }
+  const qty = budget / (snap.decision.nandOkb * snap.prices.okbUsd);
+  const r = scenario(snap, qty);
+  $('invest').innerHTML = L.invest(f(r.fabPerDay, 2), f(r.usdPerDay, 2), f(r.paybackDays, 0));
+  const pb = (fm, nm) => f(paybackFor(snap, qty, fm, nm), 0);
+  $('investSub').textContent = L.investSub(pb(0.5, 1), pb(2, 1), pb(5, 1), pb(1, 2));
+}
+
+function pendingSummary(w) {
+  const known = f(w.pendingKnown, 0), total = f(w.pendingTotal, 0);
+  const totalFn = chain === 'bsc' ? L.pendingTotalBem : L.pendingTotal;
+  const subFn = chain === 'bsc' ? L.pendingSubtotalBem : L.pendingSubtotal;
+  if (w.pendingComplete === true && w.pendingFab != null) return totalFn(f(w.pendingFab, 2), known, total);
+  if (w.pendingKnown > 0 && w.pendingSubtotalFab != null) return subFn(f(w.pendingSubtotalFab, 2), known, total);
+  return L.pendingUnknown(known, total);
+}
+
+function renderMine() {
+  const snapOk = chain === 'bsc' ? walletRes?.head != null : !!snap;
+  if (!walletRes || !snapOk) { show('assetCard', false); show('alertBox', false); return; }
+  const w = walletRes, partial = w.discovery?.complete === false;
+  const noRigs = chain === 'bsc' ? L.noRigsBsc : L.noRigs;
+  const outLabel = chain === 'bsc' ? L.mineOutBsc : L.mineOut;
+  show('mineIdle', false); show('mineOut', true); show('mineSub', true);
+  show('assetCard', !!w.circuits);
+  if (!w.circuits) { $('mineOut').textContent = partial ? L.minePartial(w.discovery.verified ?? 0, w.discovery.expected ?? '—') : noRigs; $('mineSub').innerHTML = `<button class="link" id="other">${L.other}</button>`; }
+  else {
+    const card = chain === 'bsc' ? podAssetCard(podSnap, w) : assetCard(snap, w);
+    $('mineOut').textContent = partial ? L.minePartial(w.discovery.verified ?? w.circuits, w.discovery.expected ?? '—') : outLabel(w.circuits);
+    const share = f(card.fabPerDay == null ? null : w.networkSharePct, 3);
+    const sub = chain === 'bsc'
+      ? L.mineSubBsc(pendingSummary(w), share)
+      : L.mineSub(pendingSummary(w), share, f(w.networkShareDenomFabPerDay ?? snap?.network?.verifiedFabPerDay, 2));
+    $('mineSub').innerHTML = esc(w.loading ? L.measuring : sub) + ` · <button class="link" id="other">${L.other}</button>`;
+    renderAssetCard(card);
+  }
+  const example = exampleWallet().toLowerCase();
+  renderFavorites();
+  show('alertBox', !!w.circuits && !w.loading && !!walletAddr && walletAddr !== example);
+  if (partial) {
+    $('mineSub').innerHTML = `<span class="warn">${esc(L.discoveryPartial)}</span> <button class="link" id="retryMine">${L.retryMine}</button> · ` + $('mineSub').innerHTML;
+    $('retryMine').onclick = () => lookup(walletAddr);
+  }
+  $('other').onclick = () => { if (location.pathname === '/rigs') history.pushState(null, '', '/'); walletRequest++; walletController?.abort(); walletPending = false; resumeBackground(); walletRes = null; walletAddr = null; $('mine').disabled = false; $('mine').textContent = L.mine; show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false); alertState = null; alertBindUrl = null; renderAlertMsg(); show('werr', false); show('pasteRow', true); $('addr').value = ''; $('addr').focus(); };
+}
+
+// One historical read per snapshot head, independent of wallet lookup and language changes.
+function growthFor(current) {
+  const key = current.head;
+  if (!growthCache.has(key)) {
+    const entry = { result: null };
+    growthCache.set(key, entry);
+    deadline(signal => networkGrowth(current, { signal }), Math.max(1, walletExpiresAt - Date.now()))
+      .catch(() => ({ measured: false, daily: 0 })).then((result) => {
+      entry.result = result;
+      if (snap?.head === key && walletRes) renderMine();
+    });
+  }
+  return growthCache.get(key).result;
+}
+
+function isPrimarySite() {
+  const host = location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === 'fabx-miner-desk.pages.dev' || host === 'fabx.leolabs.me';
+}
+function syncDeepLinkUrl() {
+  if (!walletAddr) return;
+  if (!isPrimarySite()) {
+    const params = new URLSearchParams();
+    params.set('addr', walletAddr);
+    if (chain !== 'fabx') params.set('chain', chain);
+    const hash = pendingRigId ? `rig-${pendingRigId}` : params.toString();
+    history.replaceState(null, '', `${location.pathname}${location.search}#${hash}`);
+    return;
+  }
+  const path = /\/rigs\/?$/.test(location.pathname) ? location.pathname.replace(/\/?$/, '/') : '/rigs/';
+  const url = new URL(path, location.origin);
+  url.searchParams.set('addr', walletAddr);
+  if (chain !== 'fabx') url.searchParams.set('chain', chain);
+  else url.searchParams.delete('chain');
+  url.hash = pendingRigId ? `rig-${pendingRigId}` : '';
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function scrollToPendingRig() {
+  if (!pendingRigId || walletRes?.loading) return;
+  const row = document.getElementById(`rig-${pendingRigId}`);
+  if (!row) return;
+  const details = $('allRigs');
+  if (details) { details.open = true; rigsExpanded = true; }
+  row.scrollIntoView({ block: 'center' });
+  pendingRigId = null;
+}
+
+function renderAssetCard(card) {
+  // Native details toggles queue their event; read the live state before any rerender.
+  rigsExpanded = $('allRigs')?.open ?? rigsExpanded;
+  rememberSlotOpen();
+  assetPaybackExpanded = $('assetPayback')?.open ?? assetPaybackExpanded;
+  const money = (value) => value == null ? '—' : L.money(f(value, 2));
+  const measured = card.rigs.filter((rig) => rig.fabPerDay != null && Number.isFinite(rig.fabPerDay)).length;
+  const stat = (label, value, detail = '') => `<div class="asset-stat"><span>${label}</span><strong>${value}</strong>${detail ? `<small>${detail}</small>` : ''}</div>`;
+  const isBsc = chain === 'bsc';
+  const dailyToken = (value) => tokenLabel()(f(value, 2));
+  const headers = isBsc ? [L.rigId, L.rigBem, L.rigStatus] : [L.rigId, L.rigFab, L.rigValue, L.rigStatus];
+  const order = { stopped: 0, revoked: 0, unread: 1, 'claimed-in-window': 2, loading: 3, mining: 4 };
+  const rigs = [...card.rigs].sort((a, b) => (order[a.status] ?? 1) - (order[b.status] ?? 1));
+  const counts = { mining: 0, stopped: 0, revoked: 0, 'claimed-in-window': 0, unread: 0, loading: 0 };
+  for (const rig of rigs) counts[rig.status in counts ? rig.status : 'unread']++;
+  const abnormal = rigs.filter(rig => !['mining', 'loading'].includes(rig.status) || ['unverified', 'mixed'].includes(rig.pool));
+  const rigTags = (rig) => {
+    const tags = [];
+    if (rig.optimal) tags.push(L.rigOptimal);
+    if (rig.verified === true) tags.push(L.rigVerified);
+    else if (rig.verified === false && rig.status === 'mining') tags.push(L.rigUnverified);
+    return tags.length ? `<small>${esc(tags.join(' · '))}</small>` : '';
+  };
+  const table = (rows) => `<table class="rig-table"><thead><tr>${headers.map(label => `<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${rows.map(rig => {
+    const idCell = `<span class="rig-number">${esc(rig.id)}</span>${isBsc ? rigTags(rig) : ''}`;
+    const cells = isBsc
+      ? [idCell, `<span class="rig-number">${f(rig.fabPerDay, 2)}</span>`, `<span class="rig-status">${L.rigStatuses[rig.status] || L.rigStatuses.unread}</span>${slotMarkup(rig)}`]
+      : [`<span class="rig-number">${esc(rig.id)}</span>`, `<span class="rig-number">${f(rig.fabPerDay, 2)}</span>`, `<span class="rig-value rig-number">${money(rig.valueUsd)}<small>${L.amountOkb(f(rig.valueOkb, 4))}</small></span>`, `<span class="rig-status">${L.rigStatuses[rig.status] || L.rigStatuses.unread}</span>${rigDiagnosis(rig)}${slotMarkup(rig)}`];
+    return `<tr id="rig-${esc(rig.id)}"${rig.status === 'stopped' ? ' class="rig-stopped"' : ''}>${cells.map(cell => `<td>${cell}</td>`).join('')}</tr>`;
+  }).join('')}</tbody></table>`;
+  const growth = !isBsc && !walletRes.loading ? growthFor(snap) : null;
+  const future = growth?.measured ? `<table class="future-table"><thead><tr><th scope="col">${L.futureDays}</th>${[0.5, 1, 2].map((mult) => `<th scope="col">${L.futurePrice(mult)}</th>`).join('')}</tr></thead><tbody>${[30, 90, 180].map((days) => `<tr><th scope="row">${L.dayPeriod(days)}</th>${[0.5, 1, 2].map((fabMult) => `<td>${money(futureValue(snap, card.fabPerDay, days, { dailyNetGrowth: growth.daily, fabMult }))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '';
+  const summary = isBsc
+    ? stat(L.assetOutput, dailyToken(card.fabPerDay), `${money(card.usdPerDay)} ${L.perDay}`)
+    : `${stat(L.assetValue, money(card.valueUsd), L.amountOkb(f(card.valueOkb, 4)))}${stat(L.assetOutput, L.amountFab(f(card.fabPerDay, 2)), `${money(card.usdPerDay)} ${L.perDay}`)}${stat(L.assetApr, card.apr == null ? '—' : f(card.apr * 100, 1) + '%')}`;
+  const example = exampleWallet().toLowerCase();
+  $('assetCard').innerHTML = `<h3>${L.assetH}</h3>
+    ${walletAddr?.toLowerCase() === example ? `<p class="asset-note">${esc(L.exampleDisclosure)}<br><span style="overflow-wrap:anywhere">${esc(walletAddr)}</span></p>` : ''}
+    ${walletRes.discovery?.complete === false ? `<p class="asset-note warn">${esc(L.discoveryPartial)}</p>` : ''}
+    <div class="asset-summary">${summary}</div>
+    ${isBsc || walletRes.loading ? '' : `<details class="rig-list" id="assetPayback"${assetPaybackExpanded ? ' open' : ''}><summary>${featureText().payback}</summary>${paybackRows({ cost: card.valueUsd, dailyRevenue: card.usdPerDay, poolShares: outputPoolShares(card.rigs), tokenPrice: snap.prices.fabUsd, context: paybackContextFor({ head: walletRes.head ?? snap.head, headTimestamp: walletRes.blockTimestamp ?? snap.headTimestamp }), basis: assetPaybackBasis() })}</details>`}
+    ${walletRes.loading ? '' : `<div class="row" style="margin:10px 0 4px"><button type="button" class="link" id="shareCard">${L.shareBtn}</button><span class="small" id="shareMsg" role="status"></span></div><canvas id="shareCanvas" hidden width="390" height="220" aria-hidden="true"></canvas>`}
+    <p class="asset-note">${esc(walletRes.loading ? L.measuring : L.assetCoverage(measured, walletRes.circuits, f(walletRes.windowSeconds == null ? null : walletRes.windowSeconds / 60, 1)))}</p>
+    ${walletRes.loading ? '' : `<p class="asset-note">${esc(pendingSummary(walletRes))}</p>`}
+    ${walletRes.loading ? '' : `<p class="asset-note">${esc(isBsc
+      ? [walletRes.indexUpdatedAt ? L.indexUpdated(observationTime(walletRes.indexUpdatedAt)) : '', L.podChainSource(f(walletRes.head, 0), observationTime(walletRes.blockTimestamp ? walletRes.blockTimestamp * 1000 : null))].filter(Boolean).join(' · ')
+      : L.assetStamp(f(walletRes.head, 0), walletRes.blockTimestamp ? new Date(walletRes.blockTimestamp * 1000).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-GB', { timeZoneName: 'short' }) : L.cacheUnknownAge))}</p>`}
+    ${walletRes.loading ? '' : `<p class="asset-note">${L.assetUnknown}</p>`}
+    ${!isBsc && snap.decision.nandOkb == null ? `<p class="asset-note warn">${L.assetNoNand}</p>` : ''}
+    ${!isBsc && nandPriceNote() ? `<p class="asset-note">${esc(nandPriceNote())}</p>` : ''}
+    ${!isBsc && availabilityNote('nand') ? `<p class="asset-note">${esc(availabilityNote('nand'))}</p>` : ''}
+    ${isBsc ? '' : `<p class="asset-note">${L.assetBasis}</p>`}
+    <h3>${L.rigH}</h3>
+    <p class="rig-summary">${walletRes.loading ? L.rigLoadingSummary(rigs.length) : L.rigSummary(rigs.length, counts)}</p>
+    ${abnormal.length ? table(abnormal) : ''}
+    <details id="allRigs" class="rig-list"${rigsExpanded ? ' open' : ''}>
+      <summary id="allRigsLabel">${L.rigToggle(rigs.length, rigsExpanded)}</summary>${table(rigs)}
+    </details>
+    ${walletRes.loading || isBsc ? '' : `<details class="rig-list"><summary>${L.futureH}</summary>
+    <p class="asset-note">${growth ? (growth.measured ? esc(L.futureMeasured(f(growth.daily * 100, 3))) : L.futureUnknown) : L.futureLoading}</p>
+    ${future}<p class="asset-note">${L.futureBasis}</p></details>`}
+    ${walletRes.loading ? '' : `<details class="rig-list"><summary>${L.assetSourcesTitle}</summary><p class="source">${esc(isBsc ? podSnapshotSource(podSnap) : snapshotSource() + ' ' + nandProvenance())}</p></details>`}`;
+  const shareUrl = walletAddr ? buildAssetUrl(location.origin, { address: walletAddr, chain }) : '';
+  const shareBtn = $('shareCard');
+  if (shareBtn && walletAddr) {
+    const spec = shareCardSpec({
+      shortAddr: shortAddress(walletAddr),
+      miningCount: counts.mining,
+      fabPerDay: card.fabPerDay == null ? null : f(card.fabPerDay, 2),
+      valueUsd: card.valueUsd == null ? null : f(card.valueUsd, 0),
+      tokenLabel: chain === 'bsc' ? 'BEM' : 'FAB',
+      lang,
+    });
+    drawShareCard($('shareCanvas'), spec);
+    shareBtn.onclick = async () => {
+      const msg = $('shareMsg');
+      msg.textContent = '';
+      try {
+        const canvas = $('shareCanvas');
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('blob'))), 'image/png'));
+        const file = new File([blob], 'fabx-miner-desk.png', { type: 'image/png' });
+        if (navigator.share) {
+          try { await navigator.share({ files: [file], url: shareUrl, title: spec.title }); return; } catch {}
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'fabx-miner-desk.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+          msg.textContent = L.shareCopied;
+        }
+      } catch { msg.textContent = L.shareFail; }
+    };
+  }
+  syncDeepLinkUrl();
+  scrollToPendingRig();
+  $('allRigs').ontoggle = () => {
+    rigsExpanded = $('allRigs').open;
+    $('allRigsLabel').textContent = L.rigToggle(rigs.length, rigsExpanded);
+  };
+}
+
+function renderRule() {
+  $('ruleOn').checked = rule.on; show('ruleBox', rule.on);
+  rule.rows.sort((a, b) => b.minRatio - a.minRatio);
+  $('ruleRows').innerHTML = rule.rows.map((r) => `<tr><td>${L.ruleRow}</td><td><input type="number" value="${Math.round(r.minRatio * 100)}" data-k="minRatio">%</td><td>${L.ruleSell}</td><td><input type="number" value="${Math.round(r.sell * 1000) / 10}" data-k="sell">%</td><td><button class="link" data-del>✕</button></td></tr>`).join('');
+  $('ruleRows').querySelectorAll('tr').forEach((tr, i) => {
+    tr.querySelectorAll('input').forEach((inp) => { inp.onchange = () => { rule.rows[i][inp.dataset.k] = Math.max(0, parseFloat(inp.value) || 0) / 100; saveRule(); render(); }; });
+    tr.querySelector('[data-del]').onclick = () => { rule.rows.splice(i, 1); saveRule(); render(); };
+  });
+}
+
+function renderSince() {
+  const { prev, now, gap } = sinceVisit;
+  $('since').textContent = L.since([L.sFab((now.fab / prev.fab - 1) * 100), L.sNet((now.w / prev.w - 1) * 100)].join(' · '), L.ago(gap / 3.6e6));
+}
+
+function showSince(fresh) {
+  let prev = null;
+  try { prev = JSON.parse(store.get('fmd.visit')); } catch {}
+  const now = { t: Date.now(), fab: fresh.prices.fabUsd, w: fresh.network.weight };
+  const gap = prev ? now.t - prev.t : 0;
+  if (prev && gap > 3 * 3.6e6) {
+    sinceVisit = { prev, now, gap }; renderSince();
+    show('since', true);
+  }
+  if (!prev || gap > 3 * 3.6e6) store.set('fmd.visit', JSON.stringify(now));
+}
+
+function needsOptionalRetry() {
+  return ['history', 'nand'].some((key) => ['cached', 'unavailable'].includes(snap?.availability?.[key]?.state));
+}
+
+function optionalRetryRefreshCore() {
+  if (staleCore) return true;
+  const history = snap?.availability?.history?.state;
+  return history !== 'live' && history !== 'skipped';
+}
+
+function scheduleOptionalRetry(request, options) {
+  clearTimeout(retryTimer); retryTimer = null;
+  if (request !== loadRequest || walletPending || document.hidden || !needsOptionalRetry()) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (request === loadRequest && !document.hidden) startOptional(request, options, optionalRetryRefreshCore());
+  }, OPTIONAL_RETRY_MS);
+}
+
+async function startOptional(request, options, refreshCore = false, remainingMs = CFG.loadTimeoutMs) {
+  if (request !== loadRequest || !snap || optionalController) return;
+  if (walletPending) { backgroundDeferred = true; return; }
+  const controller = new AbortController();
+  optionalController = controller;
+  const expiresAt = Date.now() + remainingMs;
+  let coreRefreshed = !refreshCore;
+  try {
+    if (refreshCore) {
+      // A recovered log scan must cover the current 24h window, not the head from before an outage.
+      // Keep the previous answer and wallet rows visible while refreshing; user inputs stay untouched.
+      const fresh = await snapshot({ ...options, signal: controller.signal });
+      if (request !== loadRequest || controller.signal.aborted) return;
+      coreRefreshed = true; staleCore = false; snap = fresh; render();
+    }
+    let skipHistory = false;
+    const serverHistory = await fetchServerMarket({ signal: controller.signal });
+    if (serverHistory) {
+      snap = applyHistory(snap, serverHistory.value, true);
+      snap = { ...snap, availability: { ...snap.availability, history: { state: 'live', asOf: serverHistory.asOf, error: null } } };
+      skipHistory = true;
+      if (request === loadRequest && !controller.signal.aborted) render();
+    }
+    const updated = await refreshOptional(snap, { ...options, skipHistory, signal: controller.signal,
+      timeoutMs: Math.min(CFG.optionalTimeoutMs, Math.max(1, expiresAt - Date.now())), onUpdate(next) {
+      if (request !== loadRequest || controller.signal.aborted) return;
+      snap = next; render();
+    } });
+    if (request === loadRequest && !controller.signal.aborted && updated) { snap = updated; render(); }
+  } catch (e) {
+    // Optional refresh failures must never replace the usable main answer.
+    if (request === loadRequest && !controller.signal.aborted) {
+      if (!coreRefreshed) {
+        staleCore = true;
+        if (entryResult && ['live', 'cached'].includes(entryResult.state)) entryResult = { ...entryResult, state: 'cached', error: e.message };
+      }
+      for (const key of ['history', 'nand']) {
+        if (snap.availability?.[key]?.state === 'pending') snap.availability[key] = { state: 'unavailable', asOf: null, error: e.message };
+      }
+      render();
+    }
+  } finally {
+    if (optionalController === controller) optionalController = null;
+    if (request === loadRequest && !controller.signal.aborted) {
+      startEntry(request);
+      startFavorites();
+      scheduleOptionalRetry(request, options);
+    }
+  }
+}
+
+async function load(forceFreshHead = false) {
+  const request = ++loadRequest;
+  const minHead = forceFreshHead && snap?.head ? snap.head : null;
+  coreController?.abort();
+  favoritesController?.abort(); favoritesController = null;
+  favoriteAttempts.clear();
+  for (const entry of paybackCache.values()) entry.controller?.abort();
+  paybackCache.clear();
+  entryController?.abort(); entryController = null; entryLoading = false; entryResult = null; entryExpanded = false;
+  crossController?.abort(); crossController = null; bemQuote = null; bnbUsdt = null;
+  const controller = new AbortController();
+  coreController = controller;
+  const expiresAt = Date.now() + CFG.loadTimeoutMs;
+  optionalController?.abort(); optionalController = null;
+  clearTimeout(retryTimer); retryTimer = null;
+  loadError = null; staleCore = false; snap = null; render();
+  startCrosschain(request);
+  const value = parseFloat($('nand').value);
+  const options = value > 0 ? { nandOkb: value } : {};
+  try {
+    coreLoad = deadline(signal => snapshot({ ...options, signal, minHead }), CFG.loadTimeoutMs, controller.signal);
+    const fresh = await coreLoad;
+    if (request !== loadRequest) return;
+    showSince(fresh);
+    const refreshAddress = walletRes && !walletPending ? walletAddr : null;
+    if (refreshAddress) { walletRes = null; show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false); }
+    snap = fresh; render();
+    startFavorites();
+    if (refreshAddress) lookup(refreshAddress);
+    startOptional(request, options, false, Math.max(1, expiresAt - Date.now()));
+  } catch (e) {
+    if (request === loadRequest) { loadError = e; render(); }
+  }
+}
+
+async function currentSnapshot(request) {
+  while (!snap && request === walletRequest) {
+    if (loadError) throw loadError;
+    const pending = coreLoad;
+    if (!pending) throw new Error(L.loading);
+    await pending.catch(() => {});
+    // Let the owning load() publish either its result or its terminal error.
+    await Promise.resolve();
+  }
+  return snap;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { clearTimeout(retryTimer); retryTimer = null; }
+  else if (!optionalController && snap) {
+    const value = snap.availability?.nand?.state === 'manual' ? snap.decision.nandOkb : null;
+    scheduleOptionalRetry(loadRequest, value > 0 ? { nandOkb: value } : {});
+  }
+});
+
+// User-requested reads take precedence over background scans, including during retry backoff.
+function pauseBackground() {
+  favoritesController?.abort(); favoritesController = null;
+  for (const [head, entry] of paybackCache) {
+    if (entry.controller) { entry.controller.abort(); paybackCache.delete(head); }
+  }
+  backgroundDeferred ||= !!(optionalController || entryController || retryTimer);
+  optionalController?.abort(); optionalController = null;
+  entryController?.abort(); entryController = null; entryLoading = false;
+  clearTimeout(retryTimer); retryTimer = null;
+}
+
+function resumeBackground() {
+  startFavorites();
+  if (walletPending || !backgroundDeferred || !snap) return;
+  backgroundDeferred = false;
+  const value = snap.availability?.nand?.state === 'manual' ? snap.decision.nandOkb : null;
+  startOptional(loadRequest, value > 0 ? { nandOkb: value } : {}, staleCore);
+}
+
+function walletRetryDelay(error) {
+  let retryable = false, wait = 3000;
+  for (let e = error, depth = 0; e && depth < 8; e = e.cause, depth++) {
+    if (e.name === 'AbortError') return null;
+    retryable ||= e.name === 'TimeoutError' || e.retryable === true
+      || /timeout|timed out|network|failed to fetch|temporarily unavailable|HTTP (?:403|408|429|5\d\d)|missing trie node|header not found|internal server error/i.test(e.message || '');
+    if (Number.isFinite(e.retryAfterMs)) wait = Math.max(wait, e.retryAfterMs);
+  }
+  return retryable ? wait : null;
+}
+
+function waitForWalletRetry(ms, signal) {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
+    const timer = setTimeout(finish, ms);
+    const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
+    signal.addEventListener('abort', abort, { once: true });
+  });
+}
+
+async function lookup(a, timeoutMs = CFG.walletTimeoutMs) {
+  $('mineSection').open = true;
+  show('werr', false);
+  if (!isAddress(a)) { setWalletMessage('badAddr'); show('werr', true); show('pasteRow', true); return; }
+  const request = ++walletRequest;
+  walletController?.abort();
+  const controller = new AbortController();
+  walletController = controller;
+  walletPending = true; pauseBackground();
+  walletMessage = null;
+  walletRes = null; walletAddr = null; alertState = null; alertBindUrl = null; renderAlertMsg();
+  slotController?.abort(); slotController = null; slotGeneration += 1;
+  slotById = new Map(); slotOpen.clear(); slotState = 'idle';
+  rigsExpanded = false;
+  assetPaybackExpanded = false;
+  if ($('assetPayback')) $('assetPayback').open = false;
+  if ($('allRigs')) $('allRigs').open = false;
+  show('mineIdle', true); show('mineOut', false); show('mineSub', false); show('assetCard', false); show('alertBox', false);
+  if (a.toLowerCase() !== exampleWallet().toLowerCase()) store.set('fmd.addr', a);
+  $('mine').disabled = true; $('mine').textContent = L.scanning;
+  try {
+    let result;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        // Core preparation has its own bounded wait. It never spends the wallet budget.
+        if (chain !== 'bsc') await deadline(() => currentSnapshot(request), CFG.loadTimeoutMs, controller.signal);
+        controller.signal.throwIfAborted();
+        const attemptBudget = chain !== 'bsc' ? timeoutMs : BSC_ADDRESS_LOOKUP ? 20_000 : 45_000;
+        walletExpiresAt = Date.now() + attemptBudget;
+        result = await deadline(async signal => {
+          if (chain === 'bsc' && !BSC_ADDRESS_LOOKUP) {
+            const measuredSnap = await podSnapshot({ signal, timeoutMs: attemptBudget });
+            signal.throwIfAborted();
+            if (request !== walletRequest) return;
+            podSnap = measuredSnap;
+            return await podRigs(a, measuredSnap, (step, progress) => {
+              if (signal.aborted || step !== 'measure' || !progress || request !== walletRequest) return;
+              walletAddr = a.toLowerCase();
+              walletRes = { address: a, circuits: progress.ids.length, discovery: progress.discovery, loading: true,
+                pendingFab: null, networkSharePct: null, hours: null, head: measuredSnap.head,
+                rigs: progress.ids.map(id => ({ id: String(id), fabPerDay: null, status: 'loading' })) };
+              renderMine();
+            }, { signal, timeoutMs: attemptBudget });
+          }
+          if (chain === 'bsc') {
+            const indexed = await fetchBscRigs(a, { signal });
+            signal.throwIfAborted();
+            if (request !== walletRequest) return;
+            if (indexed.building || indexed.progress?.complete !== true) return { building: true, progress: indexed.progress, address: a };
+            if (!indexed.rigs.length) {
+              return { address: a, circuits: 0, rigs: [], discovery: { complete: true, expected: 0, verified: 0, source: 'bsc-index' },
+                head: indexed.progress?.head ?? 0, pendingFab: 0, pendingKnown: 0, pendingTotal: 0, pendingComplete: true,
+                pendingSubtotalFab: 0, networkSharePct: 0, hours: 0, windowSeconds: null, indexUpdatedAt: indexed.progress?.updatedAt || null };
+            }
+            const measuredSnap = await podSnapshot({ signal, timeoutMs: attemptBudget });
+            signal.throwIfAborted();
+            if (request !== walletRequest) return;
+            podSnap = measuredSnap;
+            return await podRigsForIds(a, indexed.rigs, measuredSnap, (step, progress) => {
+              if (signal.aborted || step !== 'measure' || !progress || request !== walletRequest) return;
+              walletAddr = a.toLowerCase();
+              walletRes = { address: a, circuits: progress.ids.length, discovery: progress.discovery, loading: true,
+                pendingFab: null, networkSharePct: null, hours: null, head: measuredSnap.head,
+                rigs: progress.ids.map(id => ({ id: String(id), fabPerDay: null, status: 'loading' })) };
+              renderMine();
+            }, { signal, timeoutMs: attemptBudget, indexUpdatedAt: indexed.progress?.updatedAt });
+          }
+          let result, measuredSnap;
+          // A changed head must be remeasured within this attempt's original budget.
+          do {
+            measuredSnap = await currentSnapshot(request);
+            signal.throwIfAborted();
+            if (request !== walletRequest) return;
+            result = await wallet(a, measuredSnap, (step, progress) => {
+              if (signal.aborted || step !== 'measure' || !progress || request !== walletRequest || measuredSnap.head !== snap?.head) return;
+              walletAddr = a.toLowerCase();
+              walletRes = { address: a, circuits: progress.ids.length, discovery: progress.discovery, loading: true,
+                pendingFab: null, networkSharePct: null, hours: null,
+                rigs: progress.ids.map(id => ({ id: String(id), fabPerDay: null, status: 'loading' })) };
+              renderMine();
+            }, { signal, timeoutMs, apiCandidates: false });
+            signal.throwIfAborted();
+          } while (request === walletRequest && measuredSnap.head !== snap?.head);
+          return result;
+        }, attemptBudget, controller.signal);
+        break;
+      } catch (error) {
+        const wait = walletRetryDelay(error);
+        if (attempt || wait == null || controller.signal.aborted || request !== walletRequest) throw error;
+        await waitForWalletRetry(wait, controller.signal);
+        if (!snap && loadError && chain !== 'bsc') load();
+      }
+    }
+    if (request !== walletRequest) return;
+    if (result?.blocked || result?.building) {
+      walletRes = null;
+      walletAddr = a.toLowerCase();
+      const when = result.building && result.progress?.updatedAt ? ` · ${observationTime(result.progress.updatedAt)}` : '';
+      $('werr').textContent = result.building ? `${L.indexBuilding}${when}` : L.chainBscSoon;
+      show('werr', true);
+      show('mineIdle', true);
+      return;
+    }
+    walletRes = result; walletAddr = a.toLowerCase();
+    prepareSlot(request);
+    if (chain === 'fabx' && favorites.list().includes(walletAddr)) {
+      favoriteAttempts.set(walletAddr, result.head);
+      favoriteResults.set(walletAddr, { status: 'ready', wallet: result, summary: favoriteSummary(result) });
+    }
+    renderMine();
+    if (location.pathname !== '/rigs' && !location.pathname.endsWith('/rigs/')) history.pushState(null, '', '/rigs/');
+    syncDeepLinkUrl();
+  }
+  catch (e) { if (request === walletRequest) {
+    if (walletRes?.loading) {
+      walletRes = { ...walletRes, loading: false, rigs: walletRes.rigs.map(rig => ({ ...rig, status: 'unread' })) };
+      renderMine();
+    }
+    setWalletMessage('walletFailed', e); show('werr', true); show('mineIdle', true);
+    $('addr').value = a; show('pasteRow', true);
+  } }
+  finally { if (request === walletRequest) {
+    walletPending = false;
+    $('mine').disabled = false; $('mine').textContent = L.mine;
+    resumeBackground();
+    if (walletRes && chain === 'fabx') renderMine();
+    startFavorites();
+  } }
+}
+
+// Subscribe with one tap. The page asks for a one-time link; Telegram Start finishes the bind.
+const BIND_URL = /^https:\/\/t\.me\/fabx_miner_desk_bot\?start=[0-9a-f]{32}$/;
+let alertState = null, alertRequest = 0, alertBindUrl = null;
+let cheapState = null, cheapRequest = 0, cheapBindUrl = null;
+function readThreshold(id) {
+  const raw = String($(id).value ?? '').trim();
+  if (!raw) return 20;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 90 ? n : null;
+}
+function renderAlertMsg() {
+  $('alertMsg').textContent = alertState ? L[alertState] : '';
+  show('alertBotLink', !!alertBindUrl);
+  if (alertBindUrl) $('alertBotLink').href = alertBindUrl;
+}
+function renderCheapMsg() {
+  $('cheapMsg').textContent = cheapState ? L[cheapState] : '';
+  show('cheapLink', !!cheapBindUrl);
+  if (cheapBindUrl) $('cheapLink').href = cheapBindUrl;
+}
+const setAlert = (key) => { alertState = key; renderAlertMsg(); };
+const setCheap = (key) => { cheapState = key; renderCheapMsg(); };
+function openBind(url) {
+  try { if (typeof window.open === 'function') window.open(url, '_blank', 'noopener,noreferrer'); } catch { /* popup blocked; the link below still works */ }
+}
+async function fetchBindLink({ address, threshold, cheap }) {
+  const body = { bind: true, lang, chain: chain === 'bsc' ? 'bsc' : 'xlayer', threshold, cheap: cheap && chain !== 'bsc' };
+  if (address) body.address = address;
+  try {
+    const res = await deadline(signal => fetch(apiUrl('/api/alerts'), { method: 'POST', signal, credentials: 'omit',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), CFG.loadTimeoutMs);
+    const payload = await res.json().catch(() => null);
+    if (res.ok && payload?.ok === true && BIND_URL.test(payload.url || '')) return { state: 'alertOk', url: payload.url };
+    if (res.status === 400 && payload?.error === 'bad_threshold') return { state: 'alertBadThreshold', url: null };
+    if (res.status === 429) return { state: 'alertLimit', url: null };
+  } catch { /* network or mirror */ }
+  return { state: 'alertFail', url: null };
+}
+$('cheapGo').onclick = async () => {
+  const threshold = readThreshold('cheapThreshold');
+  if (threshold == null) return setCheap('alertBadThreshold');
+  const request = ++cheapRequest;
+  setCheap('alertSending'); $('cheapGo').disabled = true;
+  const { state, url } = await fetchBindLink({ threshold, cheap: true });
+  if (request !== cheapRequest) return;
+  $('cheapGo').disabled = false;
+  if (url) { cheapBindUrl = url; openBind(url); }
+  setCheap(state);
+};
+$('alertGo').onclick = async () => {
+  const address = walletAddr;
+  if (!address || !isAddress(address)) return setAlert('alertFail');
+  const onFabx = chain !== 'bsc';
+  const threshold = onFabx ? readThreshold('alertThreshold') : 20;
+  if (threshold == null) return setAlert('alertBadThreshold');
+  const request = ++alertRequest;
+  setAlert('alertSending'); $('alertGo').disabled = true;
+  const { state, url } = await fetchBindLink({ address, threshold, cheap: onFabx });
+  if (request !== alertRequest) return;
+  $('alertGo').disabled = false;
+  if (address === walletAddr) {
+    if (url) { alertBindUrl = url; openBind(url); }
+    setAlert(state);
+  }
+};
+
+// Feedback box: one line, no login, sent only on click. Stores text, language and page; nothing else.
+let fbState = null, fbRequest = 0;
+function renderFeedbackMsg() { $('fbMsg').textContent = fbState ? L[fbState] : ''; }
+const setFeedback = (key) => { fbState = key; renderFeedbackMsg(); };
+$('fbGo').onclick = async () => {
+  const text = $('fbText').value.replace(/\s+/g, ' ').trim();
+  if (!text) return setFeedback('fbEmpty');
+  const request = ++fbRequest;
+  setFeedback('fbSending'); $('fbGo').disabled = true;
+  let result = 'fbFail';
+  try {
+    const res = await deadline(signal => fetch(apiUrl('/api/feedback'), { method: 'POST', signal, credentials: 'omit',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, lang, page: normalizeSitePath(location.pathname || '/') ?? '/' }) }), CFG.loadTimeoutMs);
+    const body = await res.json().catch(() => null);
+    result = res.ok && body?.ok === true ? 'fbOk' : 'fbFail';
+  } catch {}
+  if (request !== fbRequest) return;
+  $('fbGo').disabled = false;
+  if (result === 'fbOk') $('fbText').value = '';
+  setFeedback(result);
+};
+$('fbText').onkeydown = (e) => { if (e.key === 'Enter') $('fbGo').onclick(); };
+
+// One button: use the wallet extension to read the address if there is one (read-only), else ask for a paste.
+$('mine').onclick = async () => {
+  const saved = store.get('fmd.addr');
+  if (saved && isAddress(saved)) return lookup(saved);
+  const eth = window.okxwallet || window.ethereum;
+  if (!eth?.request) { setWalletMessage('noWallet'); show('werr', true); show('pasteRow', true); $('addr').focus(); return; }
+  const request = ++walletRequest;
+  walletController?.abort();
+  try {
+    $('mine').textContent = L.mineConnecting;
+    const [acct] = await deadline(() => eth.request({ method: 'eth_requestAccounts' }), CFG.loadTimeoutMs);
+    if (request !== walletRequest) return;
+    if (acct) await lookup(acct);
+    else { setWalletMessage('noWallet'); show('werr', true); show('pasteRow', true); }
+  } catch (e) {
+    if (request !== walletRequest) return;
+    $('mine').textContent = L.mine;
+    setWalletMessage(e?.code === 4001 ? 'rejected' : 'failed', e?.code === 4001 ? null : e); show('werr', true); show('pasteRow', true);
+  } finally { if (request === walletRequest) $('mine').textContent = L.mine; }
+};
+$('go').onclick = () => lookup($('addr').value.trim());
+$('favoriteAdd').onclick = () => addFavorite($('favoriteAddr').value.trim());
+$('favoriteAddr').onkeydown = event => { if (event.key === 'Enter') addFavorite($('favoriteAddr').value.trim()); };
+$('favoriteCurrent').onclick = () => { if (chain === 'fabx' && walletAddr) addFavorite(walletAddr); };
+$('favoriteRefresh').onclick = () => load(true);
+$('addr').onkeydown = (e) => { if (e.key === 'Enter') lookup($('addr').value.trim()); };
+$('example').onclick = () => lookup(exampleWallet());
+$('already').onclick = () => { $('mineSection').open = true; $('mineSection').scrollIntoView({ block: 'start' }); };
+$('apply').onclick = () => load(true);
+$('entryRetry').onclick = () => load(true);
+$('manualNand').onclick = () => { $('more').open = true; $('nand').focus(); };
+$('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; L = T[lang]; store.set('fmd.lang', lang); applyStatic(); render(); renderRadar(); };
+
+// Homepage tabs (2026-11): the TapeOut ecosystem radar first, the payback calculator second. Rig pages, shared asset
+// links and #calc open on the calculator.
+let radarState = { status: 'loading', items: [] };
+function renderRadar() {
+  const R = radarText(lang);
+  $('tabRadar').textContent = R.tabRadar;
+  $('tabCalc').textContent = R.tabCalc;
+  $('radarTitle').textContent = R.title;
+  $('radarSub').textContent = R.sub;
+  $('radarCalc').textContent = R.calcHint;
+  $('radarMore').textContent = `${R.more} ↗`;
+  $('radarMore').href = RADAR_MORE;
+  const cards = radarState.status === 'ok' ? radarCards(radarState.items, lang) : '';
+  $('radarList').innerHTML = cards;
+  $('radarState').textContent = radarState.status === 'loading' ? R.loading : radarState.status === 'error' ? R.error : cards ? '' : R.empty;
+  $('radarState').hidden = !$('radarState').textContent;
+}
+function setView(view, { remember = true } = {}) {
+  const calc = view === 'calc';
+  $('radarView').hidden = calc;
+  $('calcView').hidden = !calc;
+  $('tabRadar').setAttribute('aria-selected', String(!calc));
+  $('tabCalc').setAttribute('aria-selected', String(calc));
+  if (remember) history.replaceState(null, '', `${location.pathname}${location.search}${calc ? '#calc' : ''}`);
+}
+$('tabRadar').onclick = () => setView('radar');
+$('tabCalc').onclick = () => setView('calc');
+$('radarCalc').onclick = () => { setView('calc'); window.scrollTo({ top: 0 }); };
+{
+  const deep = parseDeepLink(location.href);
+  const calcFirst = location.hash === '#calc' || normalizeSitePath(location.pathname) === '/rigs' || Boolean(deep.address || deep.rigId);
+  setView(calcFirst ? 'calc' : 'radar', { remember: false });
+  renderRadar();
+  fetchRadar(apiUrl('/api/radar')).then((next) => { radarState = next; renderRadar(); });
+}
+$('ruleOn').onchange = () => { rule.on = $('ruleOn').checked; saveRule(); render(); };
+$('ruleAdd').onclick = () => { rule.rows.push({ minRatio: 1, sell: 0 }); saveRule(); render(); };
+const bootHref = location.href && !location.href.endsWith('undefined')
+  ? location.href
+  : `${location.origin || 'http://localhost'}${location.pathname || '/'}${location.search || ''}${location.hash || ''}`;
+const bootLink = parseDeepLink(bootHref);
+const explicitChain = /(?:^|[#?&])chain=(bsc|fabx)(?:&|$)/.exec(bootHref)?.[1];
+if (explicitChain === 'bsc' || explicitChain === 'fabx') {
+  chain = explicitChain;
+  store.set('fmd.chain', chain);
+} else if (bootLink.address && isAddress(bootLink.address)) {
+  chain = 'fabx';
+  store.set('fmd.chain', 'fabx');
+}
+pendingRigId = bootLink.rigId;
+applyStatic();
+load();
+if (bootLink.address && isAddress(bootLink.address) && isDeskEntryPath(location.pathname)) {
+  lookup(bootLink.address);
+}
+</script>
+<script type="module" src="../track.mjs"></script>
+</body>
+</html>

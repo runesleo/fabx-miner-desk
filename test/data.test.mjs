@@ -32,7 +32,10 @@ function mockData(t, logs = () => { throw new Error('unexpected log read'); }, q
         // Nonzero high tick/fee bits must never enter sqrtPrice.
         return { id: req.id, result: '0x' + word((123456n << 160n) | (2n ** 97n)) };
       }
-      const v = { '0xef6aff46': 600_000, '0x6d1da431': 12, '0x78e97925': 1_700_000_000, '0x631f9852': 0 }[data];
+      const v = {
+        '0xef6aff46': 600_000, '0x6d1da431': 12, '0x78e97925': 1_700_000_000, '0x631f9852': 0,
+        '0xf9f8bdb7': 8_333_333, '0xd8d56ffb': 100, '0x61b8ce8c': 5000,
+      }[data.slice(0, 10)];
       assert.notEqual(v, undefined, data);
       return { id: req.id, result: hex(v) };
     };
@@ -233,6 +236,58 @@ test('ownership balance failures are explicit, make no log reads, and leave stat
   const next = await engine.snapshot({ storage: memoryStorage() });
   assert.equal(next.prices.fabUsd, 1);
   assert.equal(requests, 0);
+});
+
+test('logRangeLimited treats Sentio HTTP 429 block caps as range limits', () => {
+  const err = { rateLimited: true, message: 'RPC HTTP 429 (https://xlayer-mainnet.rpc.sentio.xyz): public eth_getLogs is limited to 1000 blocks' };
+  assert.equal(engine.logRangeLimited(err), true);
+  assert.equal(engine.logRangeLimited({ rateLimited: true, message: 'too many requests' }), false);
+});
+
+test('logsChunked shrinks oversized ranges after provider block-cap 429 and retries throttling', async t => {
+  const mod = await import(`../desk.mjs?logs=${Date.now()}`);
+  const filter = { address: mod.CFG.poolManager, topics: ['0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f', mod.CFG.poolId] };
+  let logCalls = 0;
+  t.mock.method(globalThis, 'fetch', async (url, init = {}) => {
+    const payload = JSON.parse(init.body);
+    if (payload.method !== 'eth_getLogs') {
+      return { ok: true, json: async () => ({ jsonrpc: '2.0', id: payload.id, result: '0x1' }) };
+    }
+    logCalls++;
+    const from = Number.parseInt(payload.params[0].fromBlock, 16);
+    const to = Number.parseInt(payload.params[0].toBlock, 16);
+    const span = to - from + 1;
+    if (span > 1000) {
+      return {
+        ok: false, status: 429,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ message: 'public eth_getLogs is limited to 1000 blocks' }),
+      };
+    }
+    if (logCalls === 2) {
+      return { ok: false, status: 429, headers: { get: (name) => name.toLowerCase() === 'retry-after' ? '0' : null }, json: async () => ({}) };
+    }
+    return { ok: true, json: async () => ({ jsonrpc: '2.0', id: payload.id, result: [] }) };
+  });
+  const logs = await mod.logsChunked(filter, 10_000, 14_500, new AbortController().signal);
+  assert.deepEqual(logs, []);
+  assert.ok(logCalls >= 5);
+});
+
+test('refreshOptional keeps cached median when live log scan is rate limited', async t => {
+  const mod = await import(`../desk.mjs?cache429=${Date.now()}`);
+  mockData(t, () => { throw Object.assign(new Error('RPC HTTP 429 (sentio): too many requests'), { rateLimited: true, retryable: true }); });
+  const storage = memoryStorage();
+  storage.setItem('fmd.history.v1', JSON.stringify({
+    asOf: '2026-10-21T12:00:00.000Z', head: 74_000_000,
+    value: { medianBem: 0.25, lowBem: 0.2, highBem: 0.3, lastSwapBem: 0.25, swaps24h: 3 },
+  }));
+  const snap = await mod.snapshot({ storage, skipNand: true });
+  close(snap.prices.anchorUsd, 1);
+  const next = await mod.refreshOptional(snap, { storage, skipNand: true, timeoutMs: 50 });
+  close(next.prices.anchorUsd, 1);
+  assert.equal(next.availability.history.state, 'cached');
+  assert.equal(next.availability.history.asOf, '2026-10-21T12:00:00.000Z');
 });
 
 test('malformed or future cached values are ignored instead of becoming apparent live prices', async t => {

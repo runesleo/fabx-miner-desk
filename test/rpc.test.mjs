@@ -307,11 +307,122 @@ test('caller abort interrupts failover backoff without another request', async (
 test('abort before the queued fetch starts prevents the request entirely', async () => {
   const controller = new AbortController();
   let requests = 0;
-  const client = createRpcClient({ endpoints, fetchImpl: async (_url, init) => { requests++; return success(init); } });
+  const client = createRpcClient({ endpoints, maxConcurrent: 1, fetchImpl: async (_url, init) => { requests++; return success(init); } });
   const pending = client.rpc('eth_blockNumber', [], { signal: controller.signal });
   controller.abort();
   await assert.rejects(pending, (error) => error.name === 'AbortError');
   assert.equal(requests, 0);
+  const next = client.rpc('eth_blockNumber', []);
+  await new Promise(setImmediate);
+  assert.equal(requests, 1, 'an abort just after acquiring capacity must release it');
+  assert.equal(await next, '0x2a');
+});
+
+test('cancelled queue entries do not consume capacity or block the next live request', async () => {
+  const controller = new AbortController();
+  const visited = [];
+  let releaseFirst;
+  const client = createRpcClient({ endpoints, maxConcurrent: 1, fetchImpl: async (_url, init) => {
+    const label = JSON.parse(init.body).params[0];
+    visited.push(label);
+    if (label === 'first') await new Promise((resolve) => { releaseFirst = resolve; });
+    return success(init);
+  } });
+  const first = client.rpc('eth_call', ['first']);
+  await new Promise(setImmediate);
+  const cancelled = client.rpc('eth_call', ['cancelled'], { signal: controller.signal });
+  const survivor = client.rpc('eth_call', ['survivor']);
+  controller.abort();
+  await assert.rejects(cancelled, { name: 'AbortError' });
+  releaseFirst();
+  assert.equal(await first, '0x2a');
+  await new Promise(setImmediate);
+  assert.deepEqual(visited, ['first', 'survivor']);
+  assert.equal(await survivor, '0x2a');
+});
+
+test('RPC concurrency settings reject values that cannot provide finite request capacity', () => {
+  for (const maxConcurrent of [0, -1, 1.5, Infinity, NaN, '3', null]) {
+    assert.throws(() => createRpcClient({ maxConcurrent }), /concurrency.*positive integer/i);
+  }
+});
+
+test('state, log, batch and coherent reads share the same bounded request capacity', async (t) => {
+  for (const [label, options, limit] of [['default', {}, 3], ['explicit', { maxConcurrent: 2 }, 2]]) {
+    await t.test(label, async () => {
+      let active = 0, peak = 0;
+      const client = createRpcClient({ endpoints, logEndpoint, ...options, fetchImpl: async (_url, init) => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise(setImmediate);
+        active--;
+        const body = JSON.parse(init.body);
+        const rows = (Array.isArray(body) ? body : [body]).map((request) => ({
+          jsonrpc: '2.0', id: request.id, result: request.method === 'eth_getLogs' ? [] : '0x2a',
+        }));
+        return json(Array.isArray(body) ? rows : rows[0]);
+      } });
+      const results = await Promise.all([
+        client.rpc('eth_blockNumber', []),
+        client.rpc('eth_getLogs', [{}]),
+        client.batch([['eth_call', []], ['eth_getLogs', [{}]], ['eth_call', []]]),
+        client.batch([['eth_call', []], ['eth_call', []]], 1, { coherent: true }),
+        client.runStateWork(async (_index, request) => (await request({ jsonrpc: '2.0', id: 999, method: 'eth_call', params: [] })).result),
+      ]);
+      assert.equal(peak, limit);
+      assert.equal(active, 0);
+      assert.deepEqual(results, ['0x2a', [], ['0x2a', [], '0x2a'], ['0x2a', '0x2a'], '0x2a']);
+    });
+  }
+});
+
+test('failed and timed-out requests release capacity for queued work', async (t) => {
+  for (const failure of ['network', 'timeout']) {
+    await t.test(failure, async () => {
+      let releaseFailure;
+      const client = createRpcClient({ endpoints: [endpoints[0]], maxConcurrent: 1, timeoutMs: 30, fetchImpl: async (_url, init) => {
+        if (JSON.parse(init.body).params[0] === 'fail') {
+          if (failure === 'timeout') return new Promise(() => {});
+          return new Promise((_, reject) => { releaseFailure = () => reject(new TypeError('Failed to fetch')); });
+        }
+        return success(init);
+      } });
+      const failed = assert.rejects(client.rpc('eth_call', ['fail']), (error) => error.retryable);
+      await new Promise(setImmediate);
+      const queued = client.rpc('eth_blockNumber', []);
+      releaseFailure?.();
+      await failed;
+      assert.equal(await queued, '0x2a');
+    });
+  }
+});
+
+test('all-node failure reports the remaining cooldown so the next attempt can reach a node', async () => {
+  let clock = 1000, healthy = false, retryAfterMs;
+  const visited = [];
+  const client = createRpcClient({ endpoints: endpoints.slice(0, 2), backoffMs: 0, endpointCooldownMs: 100, now: () => clock, fetchImpl: async (url, init) => {
+    visited.push(url);
+    if (healthy) return success(init);
+    if (url === endpoints[1]) clock += 40;
+    throw new TypeError('Failed to fetch');
+  } });
+  await assert.rejects(client.rpc('eth_blockNumber', []), (error) => {
+    retryAfterMs = error.retryAfterMs;
+    assert.equal(retryAfterMs, 60);
+    return true;
+  });
+  clock += retryAfterMs;
+  healthy = true;
+  assert.equal(await client.rpc('eth_blockNumber', []), '0x2a');
+  assert.deepEqual(visited, [endpoints[0], endpoints[1], endpoints[0]]);
+});
+
+test('all-node cooldown does not shorten a provider Retry-After instruction', async () => {
+  const client = createRpcClient({ endpoints: endpoints.slice(0, 2), backoffMs: 0, endpointCooldownMs: 100, now: () => 1000, fetchImpl: async (url) => {
+    if (url === endpoints[0]) throw new TypeError('Failed to fetch');
+    return json({}, 429, { 'retry-after': '2' });
+  } });
+  await assert.rejects(client.rpc('eth_blockNumber', []), (error) => error.retryAfterMs === 2000);
 });
 
 test('log calls remain on their explicit endpoint after state failover, including mixed batches', async () => {

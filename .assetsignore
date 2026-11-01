@@ -1,0 +1,14 @@
+# Repo files the site does not serve; scripts/deploy-pages.sh leaves them out of the upload. Functions deploy separately.
+*.md
+LICENSE
+schema.sql
+wrangler.toml
+.gitignore
+.assetsignore
+test
+scripts
+alerts
+docs
+dist-deweb
+dist-deweb.zip
+.worktrees

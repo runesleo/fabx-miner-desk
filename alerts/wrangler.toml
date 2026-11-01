@@ -1,0 +1,17 @@
+# Rig income alert worker. Deploy from this directory: `wrangler deploy`.
+# Secrets (never in the repo): `wrangler secret put FABX_DESK_BOT_TOKEN` and `wrangler secret put TELEGRAM_WEBHOOK_SECRET`.
+# Shares the Pages project's D1 database; apply ../schema.sql to it first.
+name = "fabx-miner-desk-alerts"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fabx-miner-desk"
+database_id = "10e36c9e-f728-4c52-ba2c-15502f9355d2"
+
+[vars]
+SITE_URL = "https://r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech/"

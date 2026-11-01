@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sendHit } from '../track.mjs';
+import { HOSTED_API_ORIGIN } from '../api-url.mjs';
 
 function browser({ dnt = null, storage = 'ok', lang = 'en-US', saved = {}, pathname = '/', referrer = '', beacon = true } = {}) {
   const local = new Map(Object.entries(saved)), beacons = [], fetches = [];
@@ -40,6 +41,16 @@ test('track omits own-site referrers and falls back to keepalive fetch, swallowi
   assert.equal(b.fetches[0].init.keepalive, true);
   assert.ok(!b.fetches[0].init.body.includes('0xabc'));
   await new Promise(resolve => setTimeout(resolve, 0));
+});
+
+test('track uses hosted API origin on DeWeb hostnames', async () => {
+  const host = 'r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech';
+  const b = browser({ pathname: '/v/2/rigs/', referrer: '', saved: { 'fmd.cid': '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' } });
+  b.env.location.hostname = host;
+  sendHit(b.env);
+  assert.equal(b.beacons[0].url, `${HOSTED_API_ORIGIN}/api/hit`);
+  const body = JSON.parse(await b.beacons[0].blob.text());
+  assert.equal(body.path, '/rigs');
 });
 
 test('track does nothing when Do Not Track is on or local storage is unavailable', () => {

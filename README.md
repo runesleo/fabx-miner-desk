@@ -6,12 +6,13 @@
 
 A read-only dashboard for FabX miners on X Layer: compare build-versus-buy costs, measure rig output, and explore payback scenarios.
 
-**[Open the live app](https://fabx-miner-desk.pages.dev/)** · [Mirror on FabX DeWeb](https://r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech/) · [Product scope](PRODUCT.md) · [Changelog](CHANGELOG.md)
+**[Open the live app](https://fabx.leolabs.me/)** · [Product scope](PRODUCT.md) · [Changelog](CHANGELOG.md)
 
 Built as an entry in the **X Layer TapeOut Developer Acceleration Program**.
 
 ## What you get
 
+- **TapeOut ecosystem radar (homepage tab)** — what you can join in the TapeOut ecosystem on BSC and X Layer right now: open activity from official accounts over the last 7 days, each with its original post. Items come from the [Leo Labs opportunity radar](https://leolabs.me/radar?theme=tapeout) through `/api/radar`.
 - **Build or buy** — compare the modeled cost of building 1 FAB/day with measurable official rig listings, in OKB per FAB/day.
 - **Rig asset cards** — inspect an address's confirmed rigs, pending rewards, measured daily output, and replacement-cost estimates.
 - **Payback scenarios** — vary FAB price and network growth, with static gross APR and explicit assumptions.
@@ -28,7 +29,7 @@ Public X Layer contracts + reference prices
 Optional public address → confirmed rig ownership → rig asset card
 ```
 
-Open the homepage for the entry comparison. Expand **Entering now? Check payback next** to explore assumptions. Under **Already own rigs?**, paste an address or use the built-in public example to see its asset card.
+The homepage opens on the TapeOut radar; the **Payback calculator** tab (also `#calc`, `/rigs/` and shared asset links) holds the entry comparison. Expand **Entering now? Check payback next** to explore assumptions. Under **Already own rigs?**, paste an address or use the built-in public example to see its asset card.
 
 <img src="docs/screenshots/newbie-mobile-v2-en.png" alt="English first screen: contract risk, build-versus-buy costs, and payback entry" width="390">
 
@@ -78,7 +79,7 @@ git clone https://github.com/runesleo/fabx-miner-desk.git
 cd fabx-miner-desk
 ```
 
-This is static HTML and native ES modules. No package installation, build step, or API key is required, and chain data never passes through a backend. The hosted Cloudflare Pages copy adds two small optional functions (usage counts and the alert-beta waitlist, see Privacy); the page works fully without them. You can also download the source archive.
+This is static HTML and native ES modules, with direct public RPC and price reads and no package installation or API key required. Pages are statically hosted on FabX DeWeb; usage statistics, alert registration, feedback, and verification forwarding are provided by APIs on Cloudflare Pages. A static server can run the dashboard; those API features require the Pages service. You can also download the source archive.
 
 **Any AI coding agent:** start with [PRODUCT.md](PRODUCT.md), the contract/data definitions above, and [test/](test/). The offline self-check is `node --test`; no agent framework is required.
 
@@ -95,9 +96,15 @@ Chain and price reads go directly from your browser to public providers, never t
 
 `/?address=0x…` and `/rigs?address=0x…` support explicit address lookups. Such links reach the static host before the page clears their query string. Paste an address if you do not want it in the initial URL request. Normal lookups switch to `/rigs` without an address in the URL. Preserve the relative `rigs/index.html` symlink when copying or serving this tree.
 
-**Usage stats (hosted copy only):** to report usage for the X Layer TapeOut hackathon, `track.mjs` sends one count per page load to `/api/hit` (a Cloudflare Pages Function backed by D1). It stores the UTC day, the page (`/` or `/rigs`), the interface language, the referring site's hostname only (or nothing), a random ID kept in this browser's local storage under `fmd.cid`, and a timestamp. It does not store IP addresses, user agents, wallet addresses, full URLs, or query strings, and sets no cookies. Nothing is sent when Do Not Track is on or local storage is unavailable. To opt out, enable Do Not Track, block `/api/hit`, or clear site data (which also resets the random ID). The DeWeb copy and local static servers have no functions, so they record nothing; the beacon fails silently there. Cloudflare still sees normal connection metadata for every request, as for any hosted page.
+**Usage stats (Pages and DeWeb):** to report usage for the X Layer TapeOut hackathon, `track.mjs` sends one count per page load to `/api/hit` (a Cloudflare Pages Function backed by D1). It stores the UTC day, the page (`/` or `/rigs`), the interface language, the referring site's hostname only (or nothing), a random ID kept in this browser's local storage under `fmd.cid`, the hosting surface (Pages or DeWeb), and a timestamp. It does not store IP addresses, user agents, wallet addresses, full URLs, or query strings, and sets no cookies. Nothing is sent when Do Not Track is on or local storage is unavailable. To opt out, enable Do Not Track, block `/api/hit`, or clear site data (which also resets the random ID). The DeWeb page uses `api-url.mjs` to send stats to Cloudflare Pages. A plain local static server without API routes cannot record them. Cloudflare still sees normal connection metadata for every request, as for any hosted page.
 
-**Rig-stop alerts (free beta):** after a non-example address lookup, the asset card offers an optional Telegram sign-up. Submitting it, and only that, sends the looked-up address, your Telegram username, and the interface language to `/api/alerts`, which stores them (no IP) so we can message you if a rig of that address stops producing or its output drops abnormally. The beta is free; a paid plan is planned later. One Telegram username can register at most 20 addresses. The page stays read-only: it never asks you to connect a wallet or sign for alerts. To be removed, contact the author (see About the author).
+**Cheap rig alerts (free beta):** the homepage lets you set “at least this percent cheaper than building” (default 20). **Subscribe with Telegram** opens a one-time link (30 minutes, single use). After you tap Start, a cheap official listing is messaged once with the rig, price, discount versus building, and official buy link. Delisted or sold listings are not sent again. Commands: `/cheap`, `/threshold 20`, `/stop`.
+
+**Rig income alerts (free beta):** after a non-example address lookup, the same button can watch that address. No username is stored up front. After you tap Start, income-relevant rig changes (revoked, stopped, demoted, NFT transfer, ≥30% measured output drop) and FabX PodMining governance events (`Paused`, `ProcessorSet`, `Upgraded`, `BoostSet`) are messaged on Telegram. One account can watch at most 20 addresses. The page stays read-only: it never asks you to connect a wallet or sign for alerts.
+
+**Feedback (Pages and DeWeb):** the one-line box above the footer needs no login. Sending it, and only that, stores the text (at most 500 characters), the interface language and the page (`/` or `/rigs`) via `/api/feedback`; no IP, address or browser ID. The bot's `/feedback one line` stores the same text with the chat's username (or chat-scoped key) so a fix can be answered there. DeWeb also sends feedback through Cloudflare Pages; an unavailable API produces a "could not send" message. The maintainer reads new feedback with `node scripts/feedback-pull.mjs` (read-only D1 query through `wrangler`; remembers the last seen id outside the repo) and marks rows `fixed` or `wontfix` in D1.
+
+**Verification forwarding:** `/api/pod-verify` forwards the task ID and on-chain netlist to the official FabX verifier without storing the request. Chain status reads still use public RPC directly. Official vector verification is not currently integrated for BSC. Passing every official vector does not prove correctness for every input or guarantee the optimal slot.
 
 The demo address `0xe0cb3d9542a786c60605dd55efb9ef79490a3d6c` is a public example address, not the author's holdings. The asset-card screenshot is a historical snapshot of that example, not a current balance. Screenshots and fixtures can contain public market activity and example-wallet balances. No private key, seed phrase, or credentials are needed. Calculations are informational, not investment advice.
 
@@ -124,7 +131,11 @@ node scripts/live-check.mjs --chain-only
 
 The second command disables the optional FabX candidate-ID API to exercise on-chain discovery. These checks depend on live services; Node does not enforce browser CORS, so they do not replace a browser check.
 
-**Optional Cloudflare Pages functions** (only needed for hosted stats and alert sign-ups): `functions/api/` holds the two functions, `schema.sql` the D1 tables, and `wrangler.toml` binds a D1 database as `DB` (fill in your own `database_id`). Create the tables with `wrangler d1 execute <database> --file=schema.sql`, then deploy with `wrangler pages deploy`. `_routes.json` limits functions to `/api/*`; everything else stays static.
+**Cloudflare Pages APIs** (needed for stats, alert registration, feedback, and verification forwarding): `functions/api/` holds four endpoints (`hit`, `alerts`, `feedback`, `pod-verify`), `schema.sql` the D1 tables, and `wrangler.toml` binds a D1 database as `DB` (fill in your own `database_id`). Create the tables with `wrangler d1 execute <database> --file=schema.sql`, then deploy with `bash scripts/deploy-pages.sh` (a clean export of HEAD; paths in `.assetsignore` such as docs, tests and the alerts worker stay off the site). `_routes.json` limits functions to `/api/*`; everything else stays static.
+
+**Optional rig income alert worker** (`alerts/`): a separate Cloudflare Worker, because Pages Functions have no cron. Every 30 minutes it re-reads each signed-up address with the same read-only engine as the site (`alertMeasure()` = `wallet()` plus `getMiner` / `ownerOf`) and sends Telegram messages when verified conditions fire: `getMiner.status == 2` (revoked), stopped mining (`status == 3` with `stopBlock > 0`), loss of optimal-first (`optimal` 1→0 and `bonus`→0, with kick/reclaim/start distinguished from `Demoted` transaction selectors when logs are available), NFT `ownerOf` change away from the watched address, measured output down ≥30% versus the last observation, and global broadcasts on FabX PodMining `Paused` / `ProcessorSet` / `Upgraded` / `BoostSet`. The first observation of a rig is only a baseline. Partial reads preserve each field’s latest valid value and timestamp; confirmed chain changes can still trigger alerts, and `/list` shows interrupted monitoring. Events, baselines, and per-recipient delivery records are stored separately. Confirmed failures retry on later runs; unknown delivery outcomes wait for reconciliation without automatic resend. Telegram can only message chats that opened the bot, so the bot (`/start`, `/watch 0x…`, `/unwatch`, `/list`, `/feedback`, `/cheap`, `/threshold`, `/zh`, `/en`, `/stop`) links a chat to its chat id. **Subscribe with Telegram** opens a one-time `?start=` token; tapping Start redeems it and keeps that language for later replies (`/zh` and `/en` switch it; the Telegram client language is used only for a chat that never chose one). The same cron scans official FabX listings with the site's buy-versus-build comparison and messages subscribers when a listing is at least their threshold cheaper than building. Deploy from `alerts/` with `wrangler deploy`, set the secrets `FABX_DESK_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` with `wrangler secret put`, apply `schema.sql` to the shared D1 database (including `ALTER TABLE` notes for older deployments), then register the webhook: `https://api.telegram.org/bot<token>/setWebhook?url=https://<worker>/telegram&secret_token=<secret>`. Stored data: chat id, username (or a chat-scoped key when the account has none), language, per-rig chain/measurement state, governance log dedupe, per-address check time, alert events, and per-recipient message payloads and delivery receipts; no IPs, names or phone numbers. Offline tests run the worker against an in-memory SQLite copy of `schema.sql` with the documented migrations (`test/alerts-worker.test.mjs`).
+
+**Personal weekly digest:** from Monday 10:00 Beijing through the rest of that day, later runs retry confirmed delivery failures. Dedupe is per address, week, and recipient. Reports show ownership and measurement coverage; changes are calculated only when both this week and the immediately preceding week are complete. Partial reports never replace a complete baseline. Before running the new worker, the maintainer must apply the commented Task K migration at the end of `schema.sql` separately; executing the whole file does not execute commented SQL.
 
 ## Verified
 
@@ -155,10 +166,10 @@ Offline tests use fake providers and fixed fixtures for calculations, ownership 
 - [ ] Improve rig valuation with longer production histories, market depth, and clearer separation of replacement cost from resale estimates.
 
 **Distribution**
-- [ ] Support deployment on DeWeb and document the static-host setup.
+- [x] Static hosting on FabX DeWeb, with Cloudflare Pages APIs for stats, alert registration, feedback, and verification forwarding.
 
 **Alerts**
-- [ ] Deliver rig-stop / abnormal-output Telegram alerts to beta sign-ups; later offer them as a paid plan, with the dashboard staying free.
+- [ ] Deliver rig income Telegram alerts to beta sign-ups; later offer them as a paid plan, with the dashboard staying free.
 
 ## About the author
 

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>常见问题 · FabX Miner Desk</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec; --accent: #2563e0; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37; --accent: #6b9bff; --on-accent: #0e1013; color-scheme: dark;
+    }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  header nav a { color: var(--accent); text-decoration: none; font-size: 14px; margin-right: 12px; }
+  .ghost { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  article h2 { font-size: 17px; margin: 0 0 8px; }
+  article p { margin: 0 0 8px; font-size: 15px; }
+  article p.basis { color: var(--muted); font-size: 13px; margin-bottom: 0; }
+  article a { color: var(--accent); }
+  .toc { font-size: 14px; margin-bottom: 16px; }
+  .toc a { display: block; color: var(--accent); text-decoration: none; padding: 4px 0; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 20px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <b id="title">常见问题</b>
+    <div>
+      <nav>
+        <a href="../" id="navDesk">收益 Desk</a>
+        <a href="../start/" id="navStart">从零开始</a>
+        <a href="../links/" id="navLinks">生态入口</a>
+        <a href="../check/" id="navCheck">矿机查验</a>
+      </nav>
+      <button type="button" class="ghost" id="lang">EN</button>
+    </div>
+  </header>
+  <p class="toc" id="toc"></p>
+  <article id="faq-claim-mining">
+    <h2 id="t-claim"></h2>
+    <p id="a-claim"></p>
+    <p class="basis" id="s-claim"></p>
+  </article>
+  <article id="faq-fake-rig">
+    <h2 id="t-fake"></h2>
+    <p id="a-fake"></p>
+    <p class="basis" id="s-fake"></p>
+  </article>
+  <article id="faq-output-drop">
+    <h2 id="t-drop"></h2>
+    <p id="a-drop"></p>
+    <p class="basis" id="s-drop"></p>
+  </article>
+  <article id="faq-nft-transfer">
+    <h2 id="t-nft"></h2>
+    <p id="a-nft"></p>
+    <p class="basis" id="s-nft"></p>
+  </article>
+  <article id="faq-buy-vs-build">
+    <h2 id="t-buy"></h2>
+    <p id="a-buy"></p>
+    <p class="basis" id="s-buy"></p>
+  </article>
+  <footer id="footer"></footer>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</main>
+<script type="module">
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+const LINK = {
+  check: '../check/#rig=1&chain=fabx',
+  desk: '../',
+  feedback: '../#feedbackBox',
+};
+// Answers state only mechanics checked on chain or written in the official docs.
+const FAQ = {
+  zh: {
+    title: '常见问题', navDesk: '收益 Desk', navStart: '从零开始', navLinks: '生态入口', navCheck: '矿机查验',
+    footer: `答案只写链上核对过、或官方原文写明的机制；不是投资建议。有问题或发现写错，<a href="${LINK.feedback}">在首页底部留言</a>。`,
+    items: {
+      claim: {
+        t: '不领取收益，会影响挖矿吗？',
+        a: '不会。收益一直按权重累积，没有「必须领取」的规定。领取只是把已经产出的币打到钱包，矿机的状态和权重都不变。任何人都能替任意矿机发起领取，但币只会打给领取那一刻持有这台矿机 NFT 的地址，不会打给发起的人。',
+        s: '依据：BSC 上一笔领取交易前后的矿机数据对比，以及合约事件里的收款地址。',
+      },
+      fake: {
+        t: '什么是「假矿机」？怎么查？',
+        a: `开挖时合约只抽检 3–32 条官方测试向量，所以会有「抽检过了、电路函数其实不对」的矿机，社区常叫它假矿机。它只要在任何一条官方向量上答错，任何人都能提交这条向量把它永久撤销：撤销后不再产出，也不能重新开挖。链上能看到矿机在不在挖、是不是最优首创、在哪个池，但看不出函数对不对。查验用于检查能不能通过这道题的全部官方测试向量；全部通过也不代表所有输入都正确，也不保证不被移出榜位。如果官方向量全对、只是在别的输入上和参考实现不一样，不能用这条非官方向量举证撤销，但可以登记反例把它踢出榜位，它仍保留基础挖矿。FabX 矿机可以用 <a href="${LINK.check}">矿机查验</a> 一键跑官方接口；BSC 矿机当前没有接入官方向量验证。`,
+        s: '依据：两边合约的开挖与举证规则（官方原文 + 合约常量），以及 BSC 上已被撤销的矿机记录。',
+      },
+      drop: {
+        t: '产出为什么突然下降了？',
+        a: '常见三种，都不会让矿机停挖：① 同一题有人做出了成本更低的设计，你失去最优首创，溢价归零，保留基础挖矿；FabX 按当前持有人的基础权重及加成继续挖；② 有人登记了反例而你的电路没通过，被移出榜位（kick），同样只丢溢价；③ 全网总权重在涨，你的份额被摊薄。会让产出归零的情况：被举证撤销（永久）、持有人自己停挖（1,200 个区块冷静期后可重开）、把矿机 NFT 转给别人。另外，FabX 的挖矿合约在机制核验时仍可升级，管理员能暂停合约或调整处理器系数；BSC 上 TapeOut 的挖矿合约已封印，管理员升级和改参数的权限已失效。',
+        s: '依据：链上的夺榜、kick、撤销交易与全网权重读数；两边合约的管理员权限读数。',
+      },
+      nft: {
+        t: '把矿机 NFT 转给别人，收益归谁？',
+        a: '矿机跟着 NFT 走：转出后矿机照常挖，之后的产出和还没领取的余额都归新持有人。所以卖矿机之前，先把余额领了。',
+        s: '依据：TapeOut、FabX 官方说明；FabX 上换手后的矿机状态与权重读数。',
+      },
+      buy: {
+        t: '买现成矿机，还是自己建机？',
+        a: `Desk 首页的「入场比价」用同一口径比两条路：买 FabX 官方市场上的现成矿机，按约 10 分钟实测日产，算每 1 FAB/日要花多少 OKB；建新机按同一区块的实际排放和权重稀释，算日产 1 FAB 要多少 NAND。只覆盖官方市场，不含 Firsto 独立挂单，没算建机费用和 gas，也不是买入建议。<a href="${LINK.desk}">去看比价</a>`,
+        s: '依据：Desk 的实测方法（首页「口径与限制」里有完整说明）。',
+      },
+    },
+  },
+  en: {
+    title: 'FAQ', navDesk: 'Miner Desk', navStart: 'Start guide', navLinks: 'Ecosystem links', navCheck: 'Rig check',
+    footer: `Answers only state mechanics checked on chain or written in the official docs. Not investment advice. Questions or mistakes? <a href="${LINK.feedback}">Leave a note at the bottom of the desk</a>.`,
+    items: {
+      claim: {
+        t: 'Does not claiming affect mining?',
+        a: 'No. Rewards keep accruing by weight and nothing requires you to claim. Claiming only sends what is already mined to the wallet; the rig keeps its status and weight. Anyone can trigger a claim for any rig, but the coins always go to whoever holds the rig NFT at that moment, never to the caller.',
+        s: 'Basis: rig state before and after a claim transaction on BSC, and the recipient in the contract event.',
+      },
+      fake: {
+        t: 'What is a “fake rig” and how do I check one?',
+        a: `When a rig starts, the contract samples only 3–32 official test vectors, so a rig can pass the sample while its circuit is actually wrong. If it fails any single official vector, anyone can submit that vector and revoke it for good: no more output and no restart. On-chain fields show whether a rig is mining, optimal and in which pool, but not whether the function is correct. The check tests whether it passes every official test vector for the task; passing them all does not prove correctness for every input or guarantee it will keep its optimal slot. A mismatch on a different input cannot support an official-vector revocation, but a registered counterexample can remove the optimal slot while base mining continues. For FabX rigs, <a href="${LINK.check}">Rig check</a> runs the official API in one click; official vector verification is not currently integrated for BSC rigs.`,
+        s: 'Basis: start and challenge rules of both contracts (official docs and contract constants), and revoked rigs on BSC.',
+      },
+      drop: {
+        t: 'Why did my output drop suddenly?',
+        a: 'Three common reasons, none of which stop the rig: ① someone built a cheaper design for the same task, so you lost optimal-first and its bonus but keep base mining; FabX uses the current holder’s base weight and boosts; ② someone registered a counterexample your circuit fails and kicked it from the slot, again losing only the bonus; ③ total network weight grew and diluted your share. Causes of zero output include revocation (permanent), the holder stopping the rig (restart after 1,200 blocks), or transferring the NFT away. At the mechanism review, the FabX mining contract was still upgradeable and its admin could pause it or change processor multipliers; the TapeOut mining contract on BSC is sealed, with admin upgrade and parameter-change permissions disabled.',
+        s: 'Basis: on-chain reclaim, kick and revoke transactions, network weight readings, and admin permissions of both contracts.',
+      },
+      nft: {
+        t: 'Who earns after I transfer the rig NFT?',
+        a: 'The rig follows the NFT: it keeps mining, and both future output and any unclaimed balance belong to the new holder. Claim before you sell.',
+        s: 'Basis: TapeOut and FabX official docs; rig state and weight on FabX after transfers.',
+      },
+      buy: {
+        t: 'Buy a rig or build one?',
+        a: `The entry comparison on the desk prices both routes the same way: for rigs on the FabX official market, OKB per 1 FAB/day from about 10 minutes of measured output; for building, the NAND needed for 1 FAB/day from actual emission and weight dilution at the same block. Official market only, no Firsto independent listings, build fees and gas excluded, not a buy recommendation. <a href="${LINK.desk}">See the comparison</a>`,
+        s: 'Basis: the desk’s measurement method (full notes in the method section of the entry comparison).',
+      },
+    },
+  },
+};
+const ORDER = [
+  ['claim', 'faq-claim-mining'],
+  ['fake', 'faq-fake-rig'],
+  ['drop', 'faq-output-drop'],
+  ['nft', 'faq-nft-transfer'],
+  ['buy', 'faq-buy-vs-build'],
+];
+let lang = store.get('fmd.lang') === 'en' ? 'en' : 'zh';
+const $ = (id) => document.getElementById(id);
+function render() {
+  const t = FAQ[lang];
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = `${t.title} · FabX Miner Desk`;
+  $('title').textContent = t.title;
+  $('navDesk').textContent = t.navDesk;
+  $('navStart').textContent = t.navStart;
+  $('navLinks').textContent = t.navLinks;
+  $('navCheck').textContent = t.navCheck;
+  $('footer').innerHTML = t.footer;
+  $('lang').textContent = lang === 'zh' ? 'EN' : '中文';
+  $('toc').innerHTML = ORDER.map(([key, id]) => `<a href="#${id}">${t.items[key].t}</a>`).join('');
+  for (const [key] of ORDER) {
+    $(`t-${key}`).textContent = t.items[key].t;
+    $(`a-${key}`).innerHTML = t.items[key].a;
+    $(`s-${key}`).textContent = t.items[key].s;
+  }
+}
+$('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; store.set('fmd.lang', lang); render(); };
+render();
+</script>
+</body>
+</html>

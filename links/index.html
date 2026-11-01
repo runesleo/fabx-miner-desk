@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生态入口 · FabX Miner Desk</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec; --accent: #2563e0; --on-accent: #ffffff; --warn: #995c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37; --accent: #6b9bff; --on-accent: #0e1013; --warn: #e0a440; color-scheme: dark;
+    }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  header nav a { color: var(--accent); text-decoration: none; font-size: 14px; margin-right: 10px; }
+  .ghost { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  article h2 { font-size: 17px; margin: 0 0 10px; }
+  dl { margin: 0; }
+  dt { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  dt:first-child { margin-top: 0; }
+  dd { margin: 4px 0 0; font-size: 15px; }
+  dd a { color: var(--accent); word-break: break-all; }
+  code { font-size: 13px; word-break: break-all; }
+  .community { border-color: #e0a440; }
+  .tag { display: inline-block; font-size: 12px; color: var(--warn); margin-left: 6px; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .tag { color: #e0a440; }
+  }
+  p.note { font-size: 14px; color: var(--muted); margin: 0 0 12px; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 20px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <b id="title">生态入口</b>
+    <div>
+      <nav>
+        <a href="../" id="navDesk"></a>
+        <a href="../start/" id="navStart"></a>
+        <a href="../check/" id="navCheck"></a>
+        <a href="../faq/" id="navFaq"></a>
+      </nav>
+      <button type="button" class="ghost" id="lang">EN</button>
+    </div>
+  </header>
+  <p class="note" id="intro"></p>
+
+  <article id="fabx-block">
+    <h2 id="fabx-title"></h2>
+    <dl id="fabx-list"></dl>
+  </article>
+  <article id="tapeout-block">
+    <h2 id="tapeout-title"></h2>
+    <dl id="tapeout-list"></dl>
+  </article>
+  <article id="desk-block">
+    <h2 id="desk-title"></h2>
+    <dl id="desk-list"></dl>
+  </article>
+  <article id="community-block" class="community">
+    <h2 id="community-title"></h2>
+    <p class="note" id="community-note"></p>
+    <dl id="community-list"></dl>
+  </article>
+
+  <footer id="footer"></footer>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</main>
+<script type="module">
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+const EXPL = {
+  xlayer: 'https://www.oklink.com/xlayer',
+  bsc: 'https://www.oklink.com/bsc',
+};
+const ADDR = {
+  fabxMining: '0x4F6A2312D80753BdAFd35DDB1Bf4BB14C43F8265',
+  fabxCircuits: '0x87BFCa3494Aa228fF589ab9B642143A5e8c8F9a6',
+  fabxToken: '0x72F349B1Eee7833B26f8C81a8410775A4e231ed2',
+  fabxTransistors: '0xBe6f94115D32f3AC3252bc4626573e739bEeb714',
+  fabxBoost: '0x2F90b730BB696C1567f1eB8D0bA26b96D3B7A821',
+  fabxLens: '0xE566F9F6F20C19e2AfbD0BB9028A2517d55Bf5F5',
+  bscMining: '0x7E2E0DC66a3bD9103E69b766afA62d9f7b697b46',
+  bscToken: '0x5ce033b2bfca3af30b3e8c8457deaf776a8b695a',
+  bscTapeOutCpu: '0xb1024b89886B9a34Aa4ff5F31C411D708b20a14C',
+  bscBehemoth: '0x1F5Cb4aeaE1807Bf60c3b9C0D8aDBCC14e91f12C',
+};
+const ok = (chain, addr) => `${EXPL[chain]}/address/${addr}`;
+
+const ROWS = {
+  fabx: [
+    { k: { zh: '官网', en: 'Website' }, href: 'https://fabx.tech/' },
+    { k: { zh: '官方 X', en: 'Official X' }, href: 'https://x.com/Fabx_global' },
+    { k: { zh: '官方 Telegram', en: 'Official Telegram' }, href: 'https://t.me/fabx_tech' },
+    { k: { zh: '挖矿 / 我的矿机', en: 'Mining dashboard' }, href: 'https://fabx.tech/zh/pod' },
+    { k: { zh: '算力公式与规则', en: 'Hashrate formula' }, href: 'https://fabx.tech/zh/pod/formula' },
+    { k: { zh: '矿机市场', en: 'Rig market' }, href: 'https://fabx.tech/en/circuits' },
+    { k: { zh: 'NAND/LATCH 市场', en: 'Transistor market' }, href: 'https://fabx.tech/en/market/0xbe6f94115d32f3ac3252bc4626573e739beeb714-0' },
+    { k: { zh: 'DeWeb 工具列表', en: 'DeWeb tools index' }, href: 'https://fabx.tech/en/deweb' },
+    { k: { zh: 'X Layer 浏览器', en: 'X Layer explorer' }, href: EXPL.xlayer },
+    { k: { zh: 'PodMining 合约', en: 'PodMining contract' }, href: ok('xlayer', ADDR.fabxMining), code: ADDR.fabxMining },
+    { k: { zh: 'FAB 代币', en: 'FAB token' }, href: ok('xlayer', ADDR.fabxToken), code: ADDR.fabxToken },
+    { k: { zh: '电路 NFT（处理器）', en: 'Circuits (processor)' }, href: ok('xlayer', ADDR.fabxCircuits), code: ADDR.fabxCircuits },
+    { k: { zh: '晶体管铸造', en: 'Transistor mint' }, href: ok('xlayer', ADDR.fabxTransistors), code: ADDR.fabxTransistors },
+    { k: { zh: 'OKB 质押加速', en: 'OKB boost' }, href: ok('xlayer', ADDR.fabxBoost), code: ADDR.fabxBoost },
+    { k: { zh: 'PodLens（只读）', en: 'PodLens (read-only)' }, href: ok('xlayer', ADDR.fabxLens), code: ADDR.fabxLens },
+  ],
+  tapeout: [
+    { k: { zh: '官网 / 客户端', en: 'Website / client' }, href: 'https://tapeout.net/' },
+    { k: { zh: '官方 X', en: 'Official X' }, href: 'https://x.com/TapeOutWorld' },
+    { k: { zh: '官方 Telegram', en: 'Official Telegram' }, href: 'https://t.me/TapeOutnet' },
+    { k: { zh: 'BSC 挖矿', en: 'BSC mining' }, href: 'https://tapeout.net/pod' },
+    { k: { zh: 'BSC 浏览器', en: 'BSC explorer' }, href: EXPL.bsc },
+    { k: { zh: 'PodMining 合约', en: 'PodMining contract' }, href: ok('bsc', ADDR.bscMining), code: ADDR.bscMining },
+    { k: { zh: 'BEM 代币', en: 'BEM token' }, href: ok('bsc', ADDR.bscToken), code: ADDR.bscToken },
+    { k: { zh: 'TapeOut 处理器', en: 'TapeOut processor' }, href: ok('bsc', ADDR.bscTapeOutCpu), code: ADDR.bscTapeOutCpu },
+    { k: { zh: 'Behemoth 处理器', en: 'Behemoth processor' }, href: ok('bsc', ADDR.bscBehemoth), code: ADDR.bscBehemoth },
+  ],
+  desk: [
+    { k: { zh: 'Miner Desk 首页', en: 'Miner Desk home' }, href: '../' },
+    { k: { zh: '从零开始', en: 'Start guide' }, href: '../start/' },
+    { k: { zh: '矿机查验', en: 'Rig check' }, href: '../check/' },
+    { k: { zh: '常见问题', en: 'FAQ' }, href: '../faq/' },
+  ],
+  community: [
+    { k: { zh: 'Hashrate Board（@0xTisane）', en: 'Hashrate Board (@0xTisane)' }, href: 'https://r1-f6ee5a2b5b110171f4cf44fa1b282bca3c3afa29-deweb.fabx.tech/v/4/index.html' },
+    { k: { zh: '作者 X', en: 'Author on X' }, href: 'https://x.com/0xTisane' },
+  ],
+};
+
+const COPY = {
+  zh: {
+    title: '生态入口',
+    navDesk: '收益 Desk', navStart: '从零开始', navCheck: '矿机查验', navFaq: '常见问题',
+    intro: '下列链接均在本仓库 docs/links-verification.md 留有访问记录。合约地址与 mechanism-ssot【已核实】条目一致；浏览器用 OKLink（BscScan 自动化访问未通过时不列入可点击外链）。',
+    fabxTitle: 'FabX · X Layer',
+    tapeoutTitle: 'TapeOut · BSC',
+    deskTitle: 'Miner Desk（本站）',
+    communityTitle: '社区工具',
+    communityNote: '社区工具，非官方：由社区开发者维护，规则与数据口径可能与官方站不同，使用前请自行判断。',
+    communityTag: '非官方',
+    footer: '新手上路：<a href="../start/">从零开始</a>。不是投资建议。',
+  },
+  en: {
+    title: 'Ecosystem links',
+    navDesk: 'Miner Desk', navStart: 'Start guide', navCheck: 'Rig check', navFaq: 'FAQ',
+    intro: 'URLs below are logged in docs/links-verification.md. Contract addresses match mechanism-ssot verified entries. Explorers use OKLink when BscScan blocks automated checks.',
+    fabxTitle: 'FabX · X Layer',
+    tapeoutTitle: 'TapeOut · BSC',
+    deskTitle: 'Miner Desk (this site)',
+    communityTitle: 'Community tools',
+    communityNote: 'Community tools, not official: maintained by community builders; rules and data may differ from official sites.',
+    communityTag: 'Not official',
+    footer: 'New here? <a href="../start/">Start from zero</a>. Not investment advice.',
+  },
+};
+
+let lang = store.get('fmd.lang') === 'en' ? 'en' : 'zh';
+const $ = (id) => document.getElementById(id);
+
+function renderList(el, rows, community = false) {
+  el.innerHTML = rows.map((row) => {
+    const label = row.k[lang] + (community ? ` <span class="tag">${COPY[lang].communityTag}</span>` : '');
+    const body = row.code
+      ? `<a href="${row.href}" target="_blank" rel="noopener noreferrer">${row.href}</a><br><code>${row.code}</code>`
+      : `<a href="${row.href}"${row.href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : ''}>${row.href}</a>`;
+    return `<dt>${label}</dt><dd>${body}</dd>`;
+  }).join('');
+}
+
+function render() {
+  const t = COPY[lang];
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = `${t.title} · FabX Miner Desk`;
+  $('title').textContent = t.title;
+  for (const id of ['navDesk', 'navStart', 'navCheck', 'navFaq']) $(id).textContent = t[id];
+  $('intro').textContent = t.intro;
+  $('fabx-title').textContent = t.fabxTitle;
+  $('tapeout-title').textContent = t.tapeoutTitle;
+  $('desk-title').textContent = t.deskTitle;
+  $('community-title').textContent = t.communityTitle;
+  $('community-note').textContent = t.communityNote;
+  $('footer').innerHTML = t.footer;
+  $('lang').textContent = lang === 'zh' ? 'EN' : '中文';
+  renderList($('fabx-list'), ROWS.fabx);
+  renderList($('tapeout-list'), ROWS.tapeout);
+  renderList($('desk-list'), ROWS.desk);
+  renderList($('community-list'), ROWS.community, true);
+}
+$('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; store.set('fmd.lang', lang); render(); };
+render();
+</script>
+</body>
+</html>

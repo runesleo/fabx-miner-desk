@@ -6,12 +6,13 @@
 
 先看清每份日产能要花多少，再考虑入场：在 X Layer 上比较 FabX 建机与买机成本、查看地址矿机产出、试算回本的只读工具。
 
-**[打开在线工具](https://fabx-miner-desk.pages.dev/)** · [FabX DeWeb 镜像](https://r1-dc945fd3aee9829a3c9065459e82aa503572da5f-deweb.fabx.tech/) · [产品范围](PRODUCT.md) · [版本记录](CHANGELOG.md)
+**[打开在线工具](https://fabx.leolabs.me/)** · [产品范围](PRODUCT.md) · [版本记录](CHANGELOG.md)
 
 本项目是 **X Layer TapeOut 开发者加速计划参赛作品**。
 
 ## 你能得到什么
 
+- **TapeOut 生态雷达（首页第一个标签）**：BSC 和 X Layer 上 TapeOut 生态现在能参与的事，取自官方账号近 7 天的帖子，每条附原帖。数据来自 [Leo Labs 机会雷达](https://leolabs.me/radar?theme=tapeout)，经 `/api/radar` 读取。
 - **入场先比成本**：把新建矿机与官方市场可测挂单放到同一个单位下，比较「每天产出 1 FAB，需要多少 OKB」。
 - **有矿机就看资产卡**：输入地址，查看链上确认持有的矿机、待领取奖励、实测日产与重置成本估值。
 - **把回本假设摊开**：试算 FAB 涨跌、全网权重增长对产出价值的影响，区分静态年化、回本天数与未来情景。
@@ -75,7 +76,7 @@ git clone https://github.com/runesleo/fabx-miner-desk.git
 cd fabx-miner-desk
 ```
 
-也可以下载源码压缩包。项目由静态 HTML 与原生 ES modules 组成，无需安装 npm 包、无需构建，链上数据也不经过任何后端。Cloudflare Pages 在线版额外有两个可选的小函数（使用统计和提醒内测登记，见隐私说明）；没有它们页面照样完整可用。
+也可以下载源码压缩包。项目由静态 HTML 与原生 ES modules 组成，无需安装 npm 包，直接访问公共 RPC 和行情接口。页面静态托管在 FabX DeWeb；访问统计、提醒登记、反馈和查验转发由 Cloudflare Pages 上的接口提供。静态服务器可以运行看板；使用这些接口功能需要相应的 Pages 服务。
 
 **交给任意 AI 编程助手维护时**：先读 [PRODUCT.md](PRODUCT.md)、上面的合约与数据口径，再看 [test/](test/)。只读自检命令是 `node --test`，不依赖特定 Agent 框架。
 
@@ -92,9 +93,15 @@ cd fabx-miner-desk
 
 `/?address=0x…` 和 `/rigs?address=0x…` 可直接打开地址查询。这类链接会先到静态托管服务，再由页面清除查询参数；不希望地址出现在初始 URL 请求里时，请手动粘贴。普通查询切换到 `/rigs`，URL 不附地址。复制或托管时保留 `rigs/index.html` 指向主页的相对软链接。
 
-**使用统计（仅在线托管版）**：为向 X Layer TapeOut 黑客松报告使用情况，`track.mjs` 每次打开页面向 `/api/hit`（Cloudflare Pages Function + D1）发送一次计数。只存：UTC 日期、页面（`/` 或 `/rigs`）、界面语言、来源网站域名（或空）、一个保存在本浏览器 local storage `fmd.cid` 里的随机编号，以及时间戳。不存 IP、浏览器标识（user agent）、钱包地址、完整 URL 或查询参数，也不设 cookie。开启「请勿追踪」（Do Not Track）或 local storage 不可用时不发送。退出方式：开启 Do Not Track、屏蔽 `/api/hit`，或清除站点数据（同时重置随机编号）。DeWeb 镜像和本地静态服务器没有函数，不记录任何统计，beacon 在那里静默失败。和任何托管网页一样，Cloudflare 仍会看到每个请求的正常连接元数据。
+**使用统计（Pages 和 DeWeb）**：为向 X Layer TapeOut 黑客松报告使用情况，`track.mjs` 每次打开页面向 `/api/hit`（Cloudflare Pages Function + D1）发送一次计数。只存：UTC 日期、页面（`/` 或 `/rigs`）、界面语言、来源网站域名（或空）、一个保存在本浏览器 local storage `fmd.cid` 里的随机编号，托管来源（Pages 或 DeWeb），以及时间戳。不存 IP、浏览器标识（user agent）、钱包地址、完整 URL 或查询参数，也不设 cookie。开启「请勿追踪」（Do Not Track）或 local storage 不可用时不发送。退出方式：开启 Do Not Track、屏蔽 `/api/hit`，或清除站点数据（同时重置随机编号）。DeWeb 页面通过 `api-url.mjs` 将统计请求发往 Cloudflare Pages；本地静态服务器若未配置接口，统计请求会失败且不记录。和任何托管网页一样，Cloudflare 仍会看到每个请求的正常连接元数据。
 
-**矿机停产提醒（内测免费）**：查询非示例地址后，资产卡下方提供可选的 Telegram 登记。只有点击提交时，才会把当前查询的地址、Telegram 用户名和界面语言发送到 `/api/alerts` 并保存（不存 IP），用于在该地址的矿机停止产出或产出异常下降时通过 Telegram 通知你。内测期间免费，之后计划推出付费版。一个 Telegram 用户名最多登记 20 个地址。页面仍然只读：提醒不需要连接钱包，也不需要签名。需要删除登记请联系作者（见「关于作者」）。
+**便宜矿机提醒（内测免费）**：首页可以设「比自建便宜至少百分之几」（默认 20）。点「用 Telegram 订阅」会打开一次性链接（30 分钟内有效，只能用一次）。在 Telegram 里点「开始」之后，官方市场上出现足够便宜的现成矿机时会通知你：哪一台、价格、比自建便宜多少、官方购买链接。同一条挂单只通知一次；下架或卖掉不再通知。命令：`/cheap` 开关，`/threshold 20` 改比例，`/stop` 全部退订。
+
+**矿机收益异动提醒（内测免费）**：查完一个非示例地址后，资产卡下方用同一个按钮把这个地址一并订上，不用填用户名。之后这台矿机停了、被取消、转手或实测日产大跌，以及 FabX 挖矿合约的治理动作，也会在 Telegram 通知你。一个账号最多盯 20 个地址。页面只读，不连钱包、不签名。
+
+**反馈（Pages 和 DeWeb）**：页脚上方的一句话反馈框不用登录。只有点击发送时，才会把文字（最多 500 字）、界面语言和页面（`/` 或 `/rigs`）通过 `/api/feedback` 保存；不存 IP、地址或浏览器编号。机器人的 `/feedback 一句话` 会把同样的文字连同该对话的用户名（或对话编号）一起保存，便于修好后在那里回复。DeWeb 页面也通过 Cloudflare Pages 接收反馈；接口不可用时提示「发送失败」。
+
+**查验转发**：`/api/pod-verify` 将题目编号和链上网表转发至 FabX 官方验证接口，不保存请求内容。浏览器的链上状态读取仍直接使用公共 RPC；BSC 当前没有接入官方向量验证。全部官方向量通过不代表所有输入都正确，也不保证不被移出榜位。
 
 内置地址 `0xe0cb3d9542a786c60605dd55efb9ef79490a3d6c` 是公开示例地址，非作者持仓；资产卡截图是该示例的历史快照，不代表当前余额。截图和测试样本可能包含公开市场活动及示例余额。工具不需要私钥、助记词或任何凭证，计算结果不构成投资建议。
 
@@ -121,7 +128,11 @@ node scripts/live-check.mjs --chain-only
 
 第二条禁用可选的 FabX 候选 ID API，检查链上发现路径。在线检查受服务可用性影响；Node 不执行浏览器 CORS 限制，不能用它代替真实浏览器验收。
 
-**可选：Cloudflare Pages 函数**（只有托管统计和提醒登记才需要）：`functions/api/` 下是两个函数，`schema.sql` 是 D1 表结构，`wrangler.toml` 绑定名为 `DB` 的 D1 数据库（`database_id` 需填入你自己的）。用 `wrangler d1 execute <数据库名> --file=schema.sql` 建表后，用 `wrangler pages deploy` 部署。`_routes.json` 让函数只处理 `/api/*`，其余仍是静态文件。
+**Cloudflare Pages 接口**（统计、提醒登记、反馈和查验转发需要）：`functions/api/` 下有四个接口（`hit`、`alerts`、`feedback`、`pod-verify`），`schema.sql` 是 D1 表结构，`wrangler.toml` 绑定名为 `DB` 的 D1 数据库（`database_id` 需填入你自己的）。用 `wrangler d1 execute <数据库名> --file=schema.sql` 建表后，用 `bash scripts/deploy-pages.sh` 部署（从 HEAD 干净导出，`.assetsignore` 里的文档、测试和提醒 Worker 不上传到网站）。`_routes.json` 让函数只处理 `/api/*`，其余仍是静态文件。
+
+**可选：矿机收益异动提醒 Worker**（`alerts/`）：独立的 Cloudflare Worker（Pages Functions 没有定时任务）。每 30 分钟用和网站相同的只读引擎（`alertMeasure()` = `wallet()` + `getMiner` / `ownerOf`）重新读每个登记地址，在链上可核实条件满足时发 Telegram：`getMiner.status == 2`（举证撤销）、停挖（`status == 3` 且 `stopBlock > 0`）、失去最优首创（`optimal` 1→0 且 `bonus`→0，有 `Demoted` 日志时按交易选择器区分 kick / reclaim / start）、NFT `ownerOf` 转出、实测产出较上次下降 ≥30%，以及 FabX PodMining 的 `Paused` / `ProcessorSet` / `Upgraded` / `BoostSet` 全局广播给所有已 `/start` 的订阅者。每台矿机第一次观测只记基线；部分缺数按字段保留最近有效值与时间，已确认的链上变化仍可提醒，`/list` 显示监测中断。事件、基线、按接收者保存的发送记录分别存储：明确失败在后续轮次补发，结果不明留待核对，不自动重发。Telegram 只能给打开过机器人的聊天发消息，所以机器人（`/start`、`/watch 0x…`、`/unwatch`、`/list`、`/cheap`、`/threshold`、`/stop`）负责把对话和 chat id 对上。网页上的「用 Telegram 订阅」打开一次性 `?start=` 链接，用户在 Telegram 点「开始」后才完成绑定。同一轮也会用和网站相同的买现成/自建算法扫描官方挂单，达到订阅比例就推送。部署：在 `alerts/` 下 `wrangler deploy`，用 `wrangler secret put` 设置 `FABX_DESK_BOT_TOKEN` 和 `TELEGRAM_WEBHOOK_SECRET`，把 `schema.sql` 应用到共用的 D1（旧库按文件末尾 `ALTER TABLE` 说明补列），再注册 webhook：`https://api.telegram.org/bot<token>/setWebhook?url=https://<worker>/telegram&secret_token=<secret>`。存的数据：chat id、用户名（没有用户名的账号存按聊天生成的键）、语言、每台矿机链上/测算状态、治理日志去重、每个地址的检查时间、报警事件和按接收者保存的消息及发送回执；不存 IP、姓名或手机号。离线测试用内存 SQLite 跑 `schema.sql` 及末尾注明的迁移（`test/alerts-worker.test.mjs`）。
+
+**个人周报**：北京时间周一 10:00 起至当天结束，后续轮次可补发明确失败的周报；按地址、周、接收者去重。报告显示持有与测产覆盖率，只在本周和紧邻上周都完整时计算涨跌幅，部分数据不覆盖完整基线。运行新版提醒前，维护者需单独执行 `schema.sql` 末尾 Task K 注释迁移；直接运行整个文件不会执行注释 SQL。
 
 ## 已验证
 
@@ -152,10 +163,10 @@ node scripts/live-check.mjs --chain-only
 - [ ] 引入更长的产出观察、挂单深度，进一步区分重置成本与转售估值。
 
 **部署与使用**
-- [ ] 支持 DeWeb 部署，补齐静态托管使用说明。
+- [x] FabX DeWeb 静态托管，统计、提醒登记、反馈和查验转发使用 Cloudflare Pages 接口。
 
 **提醒**
-- [ ] 向内测登记用户推送矿机停产 / 产出异常的 Telegram 提醒；之后作为付费功能提供，看板本身保持免费。
+- [ ] 向内测登记用户推送矿机收益异动的 Telegram 提醒；之后作为付费功能提供，看板本身保持免费。
 
 ## 关于作者
 

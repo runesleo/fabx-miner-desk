@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The homepage opens on a **TapeOut ecosystem radar** tab: open activity from TapeOut ecosystem official accounts (last 7 days, original post linked), read from the Leo Labs radar through the new same-origin `/api/radar` proxy (public fields only, 5-minute cache, CORS for the DeWeb copy). The calculator moves to the **Payback calculator** tab; `/rigs/`, `#calc` and shared asset links still open on it.
+- Rig-stop alerts are now **rig income alerts**: the cron worker (`alerts/worker.mjs`) tracks verified on-chain conditions (revoked, stopped, demoted with kick/reclaim/start hints, NFT transfer, ≥30% measured output drop) and broadcasts FabX PodMining governance events (`Paused`, `ProcessorSet`, `Upgraded`, `BoostSet`) to every linked chat. Bot copy, the website sign-up box, README and schema (`alert_rig_state` chain fields, `alert_worker_state`, `alert_governance_seen`) follow the mechanism SSOT wording.
+
 ### Added
+
+- Cheap official-listing alerts. The alerts cron reuses the site's buy-versus-build comparison and messages Telegram when a listing is at least the subscriber's threshold cheaper than building (default 20%). Each listing is sent once; a listing that leaves a complete scan is not sent again. The website button opens a one-time `t.me` link instead of asking for a username. Bot commands: `/cheap`, `/threshold`, `/stop`.
 
 - Privacy-friendly usage stats for the hosted copy: `track.mjs` sends one page-load count to a Cloudflare Pages Function (`/api/hit`, D1) with day, page, language, referrer host and a random browser ID; no IP, user agent, wallet address, full URL or cookie. Skipped under Do Not Track or without local storage; silently inactive on DeWeb and local servers.
 - Rig-stop alert beta: an optional Telegram sign-up below the asset card (`/api/alerts`) stores the looked-up address and Telegram username so rig stops or abnormal output drops can be reported. Free during the beta; a paid plan is planned.
 - `schema.sql` D1 migration, `wrangler.toml` Pages config, `_routes.json` limiting functions to `/api/*`, and offline tests with a fake D1.
+- Rig-stop alert delivery (`alerts/worker.mjs`): a separate cron Worker re-measures every signed-up address with `wallet()` and messages linked Telegram chats on mining→stopped, stopped→mining and ≥30% output drops; a Telegram bot (`/start`, `/watch`, `/unwatch`, `/list`, `/stop`) links usernames to chats and watches addresses directly. New D1 tables `alert_chats`, `alert_rig_state`, `alert_address_state`, `alert_events`; `desk.mjs` exports `chainHead()` (head block, timestamp, block time) so the worker measures without price reads. The website sign-up now points to the bot after a successful sign-up. Offline tests use Node's built-in SQLite against the real schema.
+
+- Feedback channel: a one-line, no-login box above the footer (`/api/feedback`, D1 table `feedback`, text ≤500 characters + language + page) and the bot command `/feedback one line` (stored with the chat key so a fix can be answered).
+- Bot language is chosen once and kept: the website's bot link carries `?start=<lang>`, `/zh` and `/en` switch it, and every later reply (`/watch`, `/list`, alerts) uses the stored language instead of the Telegram client language (10-21: `/start` answered in Chinese, `/watch` in English).
 
 ### Changed
 

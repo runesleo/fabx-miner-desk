@@ -12,3 +12,5 @@ __pycache__/
 .wrangler/
 coverage/
 *.log
+dist-deweb/
+dist-deweb.zip

@@ -4,6 +4,7 @@
 import { createRpcClient } from './rpc.mjs';
 import { readNandPrice, validNandPrice } from './nand-price.mjs';
 import { encodeTryAggregate, decodeTryAggregate } from './multicall.mjs';
+import { diagnoseRig, rigPool } from './fabx-diagnostics.mjs';
 
 export const CFG = {
   rpc: 'https://xlayerrpc.okx.com',
@@ -18,15 +19,22 @@ export const CFG = {
   weightPerTransistor: 600,          // verif weight = b* x 600 on the Genesis processor (P = 6)
   fabPerDayVerified: 7200 * 0.99,    // 7,200 FAB/day, 99% to verified miners
   supplyNandEq: 1_000_000,           // ~1M transistors minted in total (estimate)
-  logChunk: 100_000,
+  logChunk: 1_000,
+  logConcurrency: 4,
+  optionalTimeoutMs: 45_000,
   timeoutMs: 5_000,
   loadTimeoutMs: 10_000,
-  optionalTimeoutMs: 6_000,
+  walletTimeoutMs: 15_000,
   ownershipTimeoutMs: 10_000,
   ownershipApiTimeoutMs: 3_000,
   ownershipMaxIds: 20_000,
   entryTimeoutMs: 45_000,
   entryMaxListingIds: 50_000,
+  discoveryTimeoutMs: 12_000,
+  measureTimeoutMs: 12_000,
+  nandQuoteTimeoutMs: 8_000,
+  emissionTimeoutMs: 4_000,
+  cacheMaxAgeMs: { history: 86_400_000, nand: 1_800_000, entry: 3_600_000 },
   fabxApi: 'https://api.fabx.tech',
   multicall: '0xca11bde05977b3631167028862be2a173976ca11',
   // keccak256(abi.encode(poolId, uint256(6))); v4 StateLibrary.POOLS_SLOT = 6.
@@ -84,24 +92,88 @@ export async function deadline(task, timeoutMs, parentSignal) {
   }
 }
 
-// Halve only explicit range-limit errors. Throttling, server faults and timeouts degrade immediately.
-async function logsChunked(filter, from, to, signal) {
+const LOG_CHUNK_MIN = 1_000;
+const LOG_RANGE_RE = /limited to (\d+) blocks|block[ -]?range|too many (?:results|logs)|query returned more than|log response size exceeded/i;
+
+/** HTTP 429 from Sentio often encodes a block-range cap, not a throttle. */
+export function logRangeLimited(error) {
+  if (!error) return false;
+  if (error.rangeLimited) return true;
+  const message = error.message || '';
+  return Boolean(error.rateLimited && LOG_RANGE_RE.test(message));
+}
+
+function logRangeCap(error) {
+  const match = /limited to (\d+) blocks/i.exec(error?.message || '');
+  const cap = match ? Number(match[1]) : NaN;
+  return Number.isFinite(cap) && cap > 0 ? Math.max(LOG_CHUNK_MIN, cap) : null;
+}
+
+function pause(ms, signal) {
+  if (!ms || ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { cleanup(); resolve(); }, ms);
+    const onAbort = () => { cleanup(); reject(signal?.reason || new Error('aborted')); };
+    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function rpcLogCause(error) {
+  return error?.cause && typeof error.cause === 'object' ? error.cause : error;
+}
+
+async function fetchLogSpan(filter, lo, hi, signal) {
+  let size = hi - lo + 1;
   const all = [];
-  let size = CFG.logChunk;
-  for (let lo = Math.max(0, from); lo <= to;) {
+  for (let start = lo; start <= hi;) {
     signal?.throwIfAborted();
-    const hi = Math.min(lo + size - 1, to);
-    try {
-      const logs = await rpc('eth_getLogs', [{ ...filter, fromBlock: hex(lo), toBlock: hex(hi) }], { signal });
-      if (!Array.isArray(logs)) throw new Error('invalid eth_getLogs result');
-      all.push(...logs);
-      lo = hi + 1;
-    } catch (e) {
-      if (!e.rangeLimited || e.rateLimited || size <= 1_000) {
-        throw new Error(`eth_getLogs failed at blocks ${lo}-${hi}: ${e.message}`, { cause: e });
+    const end = Math.min(start + size - 1, hi);
+    let rateAttempts = 0;
+    while (true) {
+      try {
+        const logs = await rpc('eth_getLogs', [{ ...filter, fromBlock: hex(start), toBlock: hex(end) }], { signal });
+        if (!Array.isArray(logs)) throw new Error('invalid eth_getLogs result');
+        all.push(...logs);
+        start = end + 1;
+        size = hi - start + 1;
+        break;
+      } catch (e) {
+        const cause = rpcLogCause(e);
+        if (logRangeLimited(cause)) {
+          const cap = logRangeCap(cause);
+          if (cap && size > cap) { size = cap; continue; }
+          if (size > LOG_CHUNK_MIN) {
+            size = Math.max(LOG_CHUNK_MIN, Math.floor(size / 2));
+            continue;
+          }
+        }
+        if (cause?.rateLimited && !logRangeLimited(cause) && rateAttempts < 4) {
+          const wait = Math.min(60_000, cause.retryAfterMs || Math.min(8_000, 500 * 2 ** rateAttempts));
+          rateAttempts++;
+          await pause(wait, signal);
+          continue;
+        }
+        throw new Error(`eth_getLogs failed at blocks ${start}-${end}: ${e.message}`, { cause: e });
       }
-      size = Math.max(1_000, Math.floor(size / 2));
     }
+  }
+  return all;
+}
+
+// Halve explicit range-limit errors; shrink on provider block caps even when returned as HTTP 429.
+export async function logsChunked(filter, from, to, signal) {
+  const lo = Math.max(0, from);
+  const chunk = Math.max(LOG_CHUNK_MIN, CFG.logChunk);
+  const ranges = [];
+  for (let start = lo; start <= to; start += chunk) ranges.push([start, Math.min(start + chunk - 1, to)]);
+  const concurrency = Math.max(1, CFG.logConcurrency || 1);
+  const all = [];
+  for (let i = 0; i < ranges.length; i += concurrency) {
+    signal?.throwIfAborted();
+    const parts = await Promise.all(ranges.slice(i, i + concurrency)
+      .map(([rangeLo, rangeHi]) => fetchLogSpan(filter, rangeLo, rangeHi, signal)));
+    all.push(...parts.flat());
   }
   return all;
 }
@@ -163,19 +235,26 @@ function validValue(kind, value) {
     && value.lowBem <= value.medianBem && value.medianBem <= value.highBem
     && Number.isSafeInteger(value.swaps24h) && value.swaps24h > 0;
 }
+function cacheExpired(entry, kind) {
+  const maxAge = CFG.cacheMaxAgeMs[kind];
+  const anchor = entry?.savedAt ?? entry?.asOf;
+  if (!maxAge || !anchor) return false;
+  const age = Date.now() - Date.parse(anchor);
+  return Number.isFinite(age) && age > maxAge;
+}
 function readCached(storage, kind, head) {
   try {
     const entry = JSON.parse(storage?.getItem(CACHE_KEYS[kind]) || 'null');
     if (!entry || !Number.isFinite(Date.parse(entry.asOf)) || Date.parse(entry.asOf) > Date.now() + 30_000
         || !Number.isSafeInteger(entry.head) || entry.head > head || !validValue(kind, entry.value)) return null;
-    return entry;
+    return { ...entry, expired: cacheExpired(entry, kind) };
   } catch { return null; }
 }
 function saveCached(storage, kind, entry) {
-  try { storage?.setItem(CACHE_KEYS[kind], JSON.stringify(entry)); } catch { /* quota/privacy mode: live data still usable */ }
+  try { storage?.setItem(CACHE_KEYS[kind], JSON.stringify({ ...entry, savedAt: new Date().toISOString() })); } catch { /* quota/privacy mode: live data still usable */ }
 }
 const available = (state, asOf = null, error = null) => ({ state, asOf, error });
-function applyHistory(snap, value, check = false) {
+export function applyHistory(snap, value, check = false) {
   const p = snap.prices;
   const anchorUsd = value.medianBem * p.bemUsd;
   const lowUsd = value.lowBem * p.bemUsd, highUsd = value.highBem * p.bemUsd;
@@ -197,66 +276,120 @@ function marketSource(value) {
     : `Cached fill VWAP · ${value.hours}h · ${value.qty.toLocaleString('en-US')} NAND`;
 }
 
+// Head block, its timestamp and the recent average block time: the minimum `snap` that
+// wallet() needs. Used by the alert worker, which measures rigs without any price reads.
+export async function chainHead(opts = {}) {
+  return deadline(async signal => {
+    const head = Number(await rpc('eth_blockNumber', [], { signal }));
+    if (!Number.isSafeInteger(head) || head < 10_000) throw new Error('invalid block number');
+    const { seconds, headTimestamp } = await blockTime(head, signal);
+    return { head, headTimestamp, blockTime: seconds, asOf: new Date().toISOString() };
+  }, opts.timeoutMs ?? CFG.timeoutMs, opts.signal);
+}
+
 // First-screen data: NO log scans. Optional values start unknown or explicitly cached.
 // Call refreshOptional(snap, {onUpdate}) after rendering. opts.nandOkb always wins over market/cache.
 export async function snapshot(opts = {}) {
   return deadline(signal => readSnapshot({ ...opts, signal }), opts.timeoutMs ?? CFG.loadTimeoutMs, opts.signal);
 }
 
-async function readSnapshot(opts) {
-  const { signal } = opts;
-  const step = opts.onStep || (() => {});
-  step('chain');
-  const chain = async () => {
-    const head = Number(await rpc('eth_blockNumber', [], { signal }));
-    if (!Number.isSafeInteger(head) || head < 10_000) throw new Error('invalid block number');
-    const [timing, values] = await Promise.all([blockTime(head, signal), batch([
-      ['eth_call', [{ to: CFG.mining, data: SEL.totalVerifWeight }, hex(head)]],
-      ['eth_call', [{ to: CFG.mining, data: SEL.minerCount }, hex(head)]],
-      ['eth_call', [{ to: CFG.mining, data: SEL.startTime }, hex(head)]],
-      ['eth_call', [{ to: CFG.mining, data: SEL.isSealed }, hex(head)]],
-      ['eth_call', [{ to: CFG.poolManager, data: SEL.extsload + pad(CFG.poolStateSlot) }, hex(head)]],
-    ], 5, { signal })]);
-    if (values.some(v => !/^0x[0-9a-f]+$/i.test(v || ''))) throw new Error('network or pool state unavailable');
-    return { head, bt: timing.seconds, headTimestamp: timing.headTimestamp, values };
-  };
-  const [{ head, bt, headTimestamp, values: [weightHex, minersHex, startHex, sealedHex, slot0] }, bemPair, okbTicker] = await Promise.all([
-    chain(),
-    getJson(`https://api.dexscreener.com/latest/dex/pairs/bsc/${CFG.bemPairBsc}`, signal),
-    getJson('https://www.okx.com/api/v5/market/ticker?instId=OKB-USDT', signal),
-  ]);
-  step('prices');
-  const bemUsd = Number(bemPair.pairs?.[0]?.priceUsd), okbUsd = Number(okbTicker.data?.[0]?.last);
-  if (!positive(bemUsd) || !positive(okbUsd)) throw new Error('BEM or OKB USD price unavailable');
-  const fabBem = fabInBemFromSqrtPriceX96(BigInt(slot0) & ((1n << 160n) - 1n));
-  const fabUsd = fabBem * bemUsd;
+async function readChainCore(signal, minHead = null) {
+  let head = Number(await rpc('eth_blockNumber', [], { signal }));
+  if (!Number.isSafeInteger(head) || head < 10_000) throw new Error('invalid block number');
+  if (Number.isSafeInteger(minHead) && head <= minHead) {
+    const newer = Number(await rpc('eth_blockNumber', [], { signal }));
+    if (newer > head) head = newer;
+  }
+  const [timing, values] = await Promise.all([blockTime(head, signal), batch([
+    ['eth_call', [{ to: CFG.mining, data: SEL.totalVerifWeight }, hex(head)]],
+    ['eth_call', [{ to: CFG.mining, data: SEL.minerCount }, hex(head)]],
+    ['eth_call', [{ to: CFG.mining, data: SEL.startTime }, hex(head)]],
+    ['eth_call', [{ to: CFG.mining, data: SEL.isSealed }, hex(head)]],
+    ['eth_call', [{ to: CFG.poolManager, data: SEL.extsload + pad(CFG.poolStateSlot) }, hex(head)]],
+  ], 5, { signal })]);
+  if (values.some(v => !/^0x[0-9a-f]+$/i.test(v || ''))) throw new Error('network or pool state unavailable');
+  const [weightHex, minersHex, startHex, sealedHex, slot0] = values;
   const weight = Number(BigInt(weightHex)), networkNand = weight / CFG.weightPerTransistor;
-  const fabPerNandDay = CFG.fabPerDayVerified / (networkNand + 1);
+  let verifiedFabPerDay = null;
+  try {
+    const [rateHex, unverHex] = await batch([
+      ['eth_call', [{ to: CFG.mining, data: SEL.currentRate }, hex(head)]],
+      ['eth_call', [{ to: CFG.mining, data: SEL.unverifiedBps }, hex(head)]],
+    ], 5, { signal });
+    const rate = abiUint(rateHex), unverifiedBps = abiUint(unverHex);
+    if (validEmission(rate, unverifiedBps)) {
+      verifiedFabPerDay = Number(rate - rate * unverifiedBps / 10000n) * 86400 / 1e8;
+    }
+  } catch { /* emission read optional for chain-only paths */ }
+  const slotPrice = /^0x[0-9a-f]+$/i.test(slot0 || '') ? fabInBemFromSqrtPriceX96(BigInt(slot0) & ((1n << 160n) - 1n)) : null;
+  return {
+    head, bt: timing.seconds, headTimestamp: timing.headTimestamp,
+    weight, networkNand, miners: Number(BigInt(minersHex)), sealed: BigInt(sealedHex) !== 0n,
+    startTime: Number(BigInt(startHex)), slotFabBem: slotPrice, verifiedFabPerDay,
+  };
+}
+
+function snapFromChain(core, prices = null, opts = {}) {
+  const fabUsd = prices?.fabUsd ?? null;
+  const fabPerNandDay = core.verifiedFabPerDay != null && core.networkNand > 0
+    ? core.verifiedFabPerDay / core.networkNand : CFG.fabPerDayVerified / (core.networkNand + 1);
   let snap = {
-    asOf: new Date().toISOString(), head, headTimestamp, blockTime: bt, rule: opts.rule,
-    prices: { fabUsd, fabBem, bemUsd, okbUsd, source: 'slot0', crossCheck: null,
-      anchorUsd: null, lowUsd: null, highUsd: null, rangePos: null, swaps24h: null },
+    asOf: new Date().toISOString(), head: core.head, headTimestamp: core.headTimestamp, blockTime: core.bt, rule: opts.rule,
+    prices: prices ?? {
+      fabUsd: null, fabBem: core.slotFabBem, bemUsd: null, okbUsd: null, source: 'slot0', crossCheck: null,
+      anchorUsd: null, lowUsd: null, highUsd: null, rangePos: null, swaps24h: null, asOf: null,
+    },
     network: {
-      weight, networkNand, miners: Number(BigInt(minersHex)), sealed: BigInt(sealedHex) !== 0n,
-      startTime: Number(BigInt(startHex)), burnedPctEst: networkNand / CFG.supplyNandEq,
-      fabPerNandDay, usdPerNandDay: fabPerNandDay * fabUsd,
+      weight: core.weight, networkNand: core.networkNand, miners: core.miners, sealed: core.sealed,
+      startTime: core.startTime, burnedPctEst: core.networkNand / CFG.supplyNandEq,
+      fabPerNandDay, verifiedFabPerDay: core.verifiedFabPerDay,
+      usdPerNandDay: fabUsd != null ? fabPerNandDay * fabUsd : null,
     },
     decision: { nandOkb: null, nandSource: null, okbPerFabDay: null, paybackDays: null, ratio: null, tier: null },
     availability: { history: available('pending'), nand: available(opts.skipNand ? 'skipped' : 'pending') },
   };
+  return snap;
+}
+
+async function readSnapshot(opts) {
+  const { signal } = opts;
+  const step = opts.onStep || (() => {});
+  step('chain');
+  const core = await readChainCore(signal, opts.minHead ?? null);
+  let snap = snapFromChain(core, null, opts);
+  step('prices');
+  try {
+    const [bemPair, okbTicker] = await Promise.all([
+      getJson(`https://api.dexscreener.com/latest/dex/pairs/bsc/${CFG.bemPairBsc}`, signal),
+      getJson('https://www.okx.com/api/v5/market/ticker?instId=OKB-USDT', signal),
+    ]);
+    const bemUsd = Number(bemPair.pairs?.[0]?.priceUsd), okbUsd = Number(okbTicker.data?.[0]?.last);
+    if (!positive(bemUsd) || !positive(okbUsd)) throw new Error('BEM or OKB USD price unavailable');
+    if (core.slotFabBem == null) throw new Error('FAB/BEM pool price unavailable');
+    const fabBem = core.slotFabBem;
+    const fabUsd = fabBem * bemUsd;
+    const priceAsOf = new Date().toISOString();
+    snap = snapFromChain(core, {
+      fabUsd, fabBem, bemUsd, okbUsd, source: 'slot0', crossCheck: null,
+      anchorUsd: null, lowUsd: null, highUsd: null, rangePos: null, swaps24h: null, asOf: priceAsOf,
+    }, opts);
+    snap.prices.asOf = priceAsOf;
+  } catch (e) {
+    snap.availability.prices = available('unavailable', null, e.message);
+  }
   const storage = localStore(opts);
-  const history = readCached(storage, 'history', head);
+  const history = readCached(storage, 'history', core.head);
   if (history) {
     snap = applyHistory(snap, history.value);
-    snap.availability.history = available('cached', history.asOf);
+    snap.availability.history = available('cached', history.asOf, history.expired ? 'cache expired for live decisions' : null);
   }
-  const nand = readCached(storage, 'nand', head);
+  const nand = readCached(storage, 'nand', core.head);
   if (positive(opts.nandOkb)) {
     snap = applyNand(snap, opts.nandOkb, 'manual');
     snap.availability.nand = available('manual');
   } else if (!opts.skipNand && nand) {
     snap = applyNand(snap, nand.value.okb, marketSource(nand.value), nand.value);
-    snap.availability.nand = available('cached', nand.asOf);
+    snap.availability.nand = available('cached', nand.asOf, nand.expired ? 'cache expired for live decisions' : null);
   }
   step('done');
   return snap;
@@ -286,14 +419,17 @@ export async function refreshOptional(initial, opts = {}) {
     }
     if (!opts.signal?.aborted) opts.onUpdate?.(current);
   };
-  const jobs = [update('history', async signal => {
-    const day = Math.round(86400 / initial.blockTime);
-    const swaps = await logsChunked({ address: CFG.poolManager, topics: [TOPIC.swap, CFG.poolId] }, initial.head - day, initial.head, signal);
-    swaps.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber) || Number(a.logIndex) - Number(b.logIndex));
-    const series = swaps.map(fabInBemFromSwap);
-    return { medianBem: median(series), lowBem: series.reduce((a, b) => Math.min(a, b), Infinity),
-      highBem: series.reduce((a, b) => Math.max(a, b), -Infinity), lastSwapBem: series.at(-1), swaps24h: series.length };
-  }, (snap, value) => applyHistory(snap, value, true))];
+  const jobs = [];
+  if (!opts.skipHistory) {
+    jobs.push(update('history', async signal => {
+      const day = Math.round(86400 / initial.blockTime);
+      const swaps = await logsChunked({ address: CFG.poolManager, topics: [TOPIC.swap, CFG.poolId] }, initial.head - day, initial.head, signal);
+      swaps.sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber) || Number(a.logIndex) - Number(b.logIndex));
+      const series = swaps.map(fabInBemFromSwap);
+      return { medianBem: median(series), lowBem: series.reduce((a, b) => Math.min(a, b), Infinity),
+        highBem: series.reduce((a, b) => Math.max(a, b), -Infinity), lastSwapBem: series.at(-1), swaps24h: series.length };
+    }, (snap, value) => applyHistory(snap, value, true)));
+  }
   if (!opts.skipNand && !['manual', 'skipped'].includes(current.availability.nand.state)) {
     jobs.push(update('nand', signal => nandOkbMarket(initial.head, initial.blockTime, { signal,
       asOf: Number.isSafeInteger(initial.headTimestamp) ? new Date(initial.headTimestamp * 1000).toISOString() : undefined }),
@@ -450,32 +586,160 @@ async function miningReads(calls, state) {
   return values;
 }
 
+export function parseOwnerAddress(data) {
+  if (!abiOwner(data)) return null;
+  return `0x${data.slice(-40).toLowerCase()}`;
+}
+
+// Parsed getMiner tuple (23 words). Returns null when the response is missing or invalid.
+export function parseGetMiner(data) {
+  try {
+    const w = entryWords(data, 23);
+    return {
+      taskId: w[2],
+      gateCount: w[3],
+      chainStatus: Number(w[9]),
+      stopBlock: w[18],
+      bonus: w[14],
+      optimal: w[15] !== 0n,
+      bstar: w[13],
+      verifWeight: w[19],
+      unverWeight: w[20],
+    };
+  } catch { return null; }
+}
+
+// Read chain status, bonus/optimal and NFT owner for rig IDs (owned or previously tracked).
+export async function enrichRigsForAlerts(ids, snap, signal) {
+  if (!ids.length) return [];
+  const readState = { multicall: true, signal };
+  const block = hex(snap.head);
+  const keyCalls = ids.map(id => ({ data: SEL.minerKey + pad(CFG.circuits) + pad(hex(BigInt(id))) }));
+  const keyRaw = await miningReads(keyCalls.map(({ data }) => ({ data, block })), readState);
+  const follow = [];
+  const keys = keyRaw.map((keyData, i) => {
+    try {
+      const key = abiUint(keyData);
+      if (key === 0n || key === UINT256_MAX) return null;
+      follow.push({ id: ids[i], minerKey: keyData, data: SEL.getMiner + pad(keyData) });
+      return keyData;
+    } catch { return null; }
+  });
+  const ownerCalls = ids.map(id => ({ data: SEL.ownerOf + pad(hex(BigInt(id))) }));
+  const [minerRaw, ownerRaw] = await Promise.all([
+    follow.length ? miningReads(follow.map(({ data }) => ({ data, block })), readState) : [],
+    // ownerOf lives on the circuits (NFT) contract, not on mining; read it there directly.
+    batch(ownerCalls.map(({ data }) => ['eth_call', [{ to: CFG.circuits, data }, block]]), 5, { signal }).catch(() => ownerCalls.map(() => null)),
+  ]);
+  const minerById = new Map();
+  follow.forEach((row, i) => { minerById.set(String(row.id), { minerKey: row.minerKey, minerData: minerRaw[i] }); });
+  const out = [];
+  for (let i = 0; i < ids.length; i++) {
+    const id = String(ids[i]);
+    const pack = minerById.get(id);
+    const minerKey = pack?.minerKey ?? null;
+    const miner = pack?.minerData ? parseGetMiner(pack.minerData) : null;
+    const ownerData = ownerRaw[i];
+    const owner = ownerData ? parseOwnerAddress(ownerData) : null;
+    if (!miner && !owner) continue;
+    out.push({
+      id,
+      minerKey,
+      owner,
+      chainStatus: miner?.chainStatus ?? null,
+      stopBlock: miner?.stopBlock ?? null,
+      bonus: miner ? Number(miner.bonus) : null,
+      optimal: miner?.optimal ?? null,
+    });
+  }
+  return out;
+}
+
+// Wallet measurement plus per-rig chain fields for the alert worker.
+export async function alertMeasure(addr, snap, opts = {}) {
+  const walletRes = await wallet(addr, snap, () => {}, opts);
+  const signal = opts.signal;
+  const owned = new Set(walletRes.rigs.map(r => String(r.id)));
+  const track = new Set([...owned, ...(opts.trackIds || []).map(String)]);
+  const enriched = await enrichRigsForAlerts([...track].map(id => BigInt(id)), snap, signal);
+  const byId = new Map(enriched.map(row => [row.id, row]));
+  const rigs = walletRes.rigs.map(rig => {
+    const chain = byId.get(String(rig.id)) || {};
+    const measureStatus = rig.status;
+    const fabPerDay = measureStatus === 'mining' ? rig.fabPerDay : measureStatus === 'stopped' ? 0 : null;
+    return {
+      id: String(rig.id),
+      minerKey: chain.minerKey ?? null,
+      owner: chain.owner ?? null,
+      chainStatus: chain.chainStatus ?? null,
+      stopBlock: chain.stopBlock ?? null,
+      bonus: chain.bonus ?? null,
+      optimal: chain.optimal ?? null,
+      measureStatus,
+      fabPerDay,
+    };
+  });
+  for (const id of track) {
+    if (owned.has(id)) continue;
+    const chain = byId.get(id);
+    if (!chain) continue;
+    rigs.push({
+      id,
+      minerKey: chain.minerKey,
+      owner: chain.owner,
+      chainStatus: chain.chainStatus,
+      stopBlock: chain.stopBlock,
+      bonus: chain.bonus,
+      optimal: chain.optimal,
+      measureStatus: 'gone',
+      fabPerDay: null,
+    });
+  }
+  return { ...walletRes, rigs };
+}
+
 // Per-wallet yield measured on chain, with one row for every owned circuit.
 // onStep('measure', {address, ids, discovery}) publishes IDs before their numbers finish.
 export async function wallet(addr, snap, onStep = () => {}, opts = {}) {
-  return deadline(signal => readWallet(addr, snap, onStep, signal, opts), opts.timeoutMs ?? CFG.loadTimeoutMs, opts.signal);
+  return deadline(signal => readWallet(addr, snap, onStep, signal, opts), opts.timeoutMs ?? CFG.walletTimeoutMs, opts.signal);
 }
 
 async function readWallet(addr, snap, onStep, signal, opts) {
   if (!isAddress(addr)) throw new Error('not an address');
   const head = snap.head;
   onStep('scan');
-  const { ids, ...discovery } = await ownedCircuits(addr, head, { signal, apiCandidates: opts.apiCandidates });
+  const { ids, ...discovery } = await ownedCircuits(addr, head, {
+    signal, apiCandidates: opts.apiCandidates, timeoutMs: opts.discoveryTimeoutMs ?? CFG.discoveryTimeoutMs,
+  });
   signal.throwIfAborted();
   onStep('measure', { address: addr, ids: ids.map(String), discovery });
   let production = { rows: [], pendingKnown: 0, pendingSubtotalFab: 0, mining: 0,
     window: { blockTimestamp: snap.headTimestamp ?? null, previousHead: null, windowSeconds: null } };
   if (ids.length) {
     const readState = { multicall: true, signal };
-    production = await readRigProduction(ids.map(id => ({ id: id.toString() })), snap, signal,
-      (calls, block) => miningReads(calls.map(({ data }) => ({ data, block: hex(block) })), readState));
+    production = await deadline(async (measureSignal) => readRigProduction(ids.map(id => ({ id: id.toString() })), snap, measureSignal,
+      (calls, block) => miningReads(calls.map(({ data }) => ({ data, block: hex(block) })), readState)),
+    opts.measureTimeoutMs ?? CFG.measureTimeoutMs, signal);
   }
   signal.throwIfAborted();
-  const rigs = production.rows.map(({ id, fabPerDay, status }) => ({ id,
-    fabPerDay: status === 'stopped' ? 0 : fabPerDay, status: status === 'measured' ? 'mining' : status }));
-  const known = rigs.filter(row => ['mining', 'stopped'].includes(row.status));
-  const measured = known.length, unread = rigs.filter(row => row.status === 'unread').length;
-  const fabPerDay = measured || (!ids.length && discovery.complete) ? known.reduce((sum, row) => sum + row.fabPerDay, 0) : null;
+  const rigs = production.rows.map((row) => {
+    const chainStatus = row.chainStatus ?? null;
+    let status = row.status === 'measured' ? 'mining' : row.status;
+    const fabPerDay = status === 'mining' ? row.fabPerDay
+      : (status === 'stopped' || status === 'revoked') ? 0 : null;
+    return {
+      id: row.id, fabPerDay, status, chainStatus,
+      taskId: row.taskId ?? null, stopBlock: row.stopBlock ?? null,
+      pool: row.pool ?? null, poolShares: row.poolShares ?? null,
+      diagnoses: row.diagnoses ?? diagnoseRig(null),
+      measureStatus: row.measureStatus ?? (status === 'mining' ? 'mining' : status === 'unread' ? 'unread' : 'stopped'),
+      pendingStatus: row.pendingStatus ?? 'unknown',
+    };
+  });
+  const known = rigs.filter(row => row.fabPerDay != null);
+  const measured = known.length;
+  const unread = rigs.filter(row => row.status === 'unread').length;
+  const fabPerDay = known.length || (!ids.length && discovery.complete) ? known.reduce((sum, row) => sum + row.fabPerDay, 0) : null;
   const { pendingKnown, mining, window } = production;
   const pendingTotal = discovery.expected;
   const pendingComplete = discovery.complete && pendingKnown === pendingTotal;
@@ -483,15 +747,24 @@ async function readWallet(addr, snap, onStep, signal, opts) {
   const pendingFab = pendingComplete ? pendingSubtotalFab : null;
   const asOf = Number.isSafeInteger(window.blockTimestamp) && window.blockTimestamp > 0
     ? new Date(window.blockTimestamp * 1000).toISOString() : null;
+  const fabUsd = positive(snap.prices?.fabUsd) ? snap.prices.fabUsd : null;
+  const poolFabPerDay = positive(snap.network?.verifiedFabPerDay) ? snap.network.verifiedFabPerDay : null;
   return {
     address: addr, circuits: ids.length, discovery, mining, measured, unread, skipped: ids.length - measured - unread,
     head, ...window, asOf, hours: window.windowSeconds != null ? window.windowSeconds / 3600 : 0,
-    pendingFab, pendingUsd: pendingFab != null ? pendingFab * snap.prices.fabUsd : null,
+    pendingFab, pendingUsd: pendingFab != null && fabUsd != null ? pendingFab * fabUsd : null,
     pendingKnown, pendingTotal, pendingSubtotalFab, pendingComplete,
-    fabPerDay, usdPerDay: fabPerDay != null ? fabPerDay * snap.prices.fabUsd : null,
-    networkSharePct: fabPerDay != null ? (fabPerDay / CFG.fabPerDayVerified) * 100 : null,
+    fabPerDay, usdPerDay: fabPerDay != null && fabUsd != null ? fabPerDay * fabUsd : null,
+    networkSharePct: fabPerDay != null && poolFabPerDay != null ? (fabPerDay / poolFabPerDay) * 100 : null,
+    networkShareDenomFabPerDay: poolFabPerDay,
     rigs,
   };
+}
+
+/** Offline-testable wallet query used by scripts/live-check-desk.mjs */
+export async function deskWalletQuery(addr, opts = {}) {
+  const snap = await snapshot({ ...opts, apiCandidates: false, skipNand: true });
+  return wallet(addr, snap, () => {}, { apiCandidates: false, ...opts });
 }
 
 const nonNegative = (n) => Number.isFinite(n) && n >= 0;
@@ -509,7 +782,7 @@ export function assetCard(snap, walletRes) {
     return { nandEq, valueOkb, valueUsd };
   };
   const rigs = walletRes.rigs.map((rig) => {
-    const fabPerDay = ['mining', 'stopped'].includes(rig.status) && nonNegative(rig.fabPerDay) ? rig.fabPerDay : null;
+    const fabPerDay = ['mining', 'stopped', 'revoked'].includes(rig.status) && nonNegative(rig.fabPerDay) ? rig.fabPerDay : null;
     return { ...rig, fabPerDay, ...priceOutput(fabPerDay) };
   });
   const known = rigs.filter((rig) => rig.fabPerDay != null);
@@ -621,12 +894,29 @@ async function entryWindow(snap, signal) {
 
 // Endpoint rewards use 8 decimal FAB. Subtract integer base units before converting
 // to Number, so large accumulated pending balances do not erase a small time delta.
-function measuredEntry(row, values, window, emission) {
-  const unknown = status => ({ ...row, fabPerDay: null, status });
+function chainClassFromMiner(miner) {
+  const status = Number(miner[9]);
+  if (status === 2) return 'revoked';
+  if (status === 3 && miner[18] > 0n) return 'stopped';
+  return null;
+}
+
+export function measuredEntry(row, values, window, emission) {
+  // Current chain state is useful even when historic rewards, emission or timing fail.
+  const parsed = parseGetMiner(values?.[2]);
+  const state = { ...row, chainStatus: parsed?.chainStatus ?? null,
+    taskId: parsed?.taskId?.toString() ?? null, stopBlock: parsed?.stopBlock?.toString() ?? null,
+    pool: rigPool(parsed), poolShares: null };
+  const unknown = (status, extra = {}) => ({ ...state, fabPerDay: null, status, ...extra });
+  if (parsed?.chainStatus === 2 || parsed?.chainStatus === 3) {
+    return { ...state, fabPerDay: 0, status: parsed.chainStatus === 2 ? 'revoked' : 'stopped', measureStatus: 'stopped' };
+  }
   try {
-    const [now, before] = [abiUint(values[0]), abiUint(values[1])];
     const [miner, oldMiner, weights] = [entryWords(values[2], 23), entryWords(values[3], 23), entryWords(values[4], 4)];
-    if (now === UINT256_MAX || before === UINT256_MAX) return unknown('unread');
+    const chainClass = chainClassFromMiner(miner);
+    if (chainClass) return { ...row, fabPerDay: 0, status: chainClass, chainStatus: Number(miner[9]), measureStatus: 'stopped' };
+    const [now, before] = [abiUint(values[0]), abiUint(values[1])];
+    if (now === UINT256_MAX || before === UINT256_MAX) return unknown('unread', { chainStatus: Number(miner[9]), measureStatus: 'unread', pendingStatus: 'unknown' });
     // getMiner.debt changes when rewards are settled. This also conservatively excludes
     // other in-window miner updates: a positive net pending delta alone cannot rule out a claim.
     if (now < before || miner[21] !== oldMiner[21]) return unknown('claimed-in-window');
@@ -638,8 +928,9 @@ function measuredEntry(row, values, window, emission) {
         || miner[18] !== 0n || oldMiner[18] !== 0n) return unknown('unread');
     if ((weights[0] > 0n && weights[2] === 0n) || (weights[1] > 0n && weights[3] === 0n)) return unknown('unread');
     const unverEmission = emission.rate * emission.unverifiedBps / 10000n;
-    const rateAtoms = (weights[2] > 0n ? weights[0] * (emission.rate - unverEmission) / weights[2] : 0n)
-      + (weights[3] > 0n ? weights[1] * unverEmission / weights[3] : 0n);
+    const verifiedRate = weights[2] > 0n ? weights[0] * (emission.rate - unverEmission) / weights[2] : 0n;
+    const unverifiedRate = weights[3] > 0n ? weights[1] * unverEmission / weights[3] : 0n;
+    const rateAtoms = verifiedRate + unverifiedRate;
     const currentRate = Number(rateAtoms) * 86400 / 1e8;
     // Equal rewards only establish a measured zero when the independent rate
     // confirms zero emission; stale pending with a positive rate remains unknown.
@@ -650,15 +941,28 @@ function measuredEntry(row, values, window, emission) {
     // integer-rate truncation and one pending-delta base-unit rounding error.
     const tolerance = currentRate * 0.01 + 2 * 86400 / 1e8 + 86400 / window.windowSeconds / 1e8;
     if (!positive(currentRate) || !positive(fabPerDay) || Math.abs(fabPerDay - currentRate) > tolerance) return unknown('rate-mismatch');
-    return { ...row, fabPerDay, status: 'measured', currentRate };
+    return { ...state, fabPerDay, status: 'measured', currentRate, measureStatus: 'mining',
+      pool: weights[0] > 0n && weights[1] > 0n ? 'mixed' : weights[0] > 0n ? 'verified' : weights[1] > 0n ? 'unverified' : null,
+      poolShares: { verified: Number(verifiedRate) / Number(rateAtoms), unverified: Number(unverifiedRate) / Number(rateAtoms) } };
   } catch { return unknown('unread'); }
+}
+
+export async function readEmissionBaseline(head, signal) {
+  const block = hex(head);
+  const [rate, unverifiedBps] = await batch([
+    ['eth_call', [{ to: CFG.mining, data: SEL.currentRate }, block]],
+    ['eth_call', [{ to: CFG.mining, data: SEL.unverifiedBps }, block]],
+  ], 5, { signal });
+  const parsed = { rate: abiUint(rate), unverifiedBps: abiUint(unverifiedBps) };
+  if (!validEmission(parsed.rate, parsed.unverifiedBps)) throw new Error('invalid emission rate');
+  return parsed;
 }
 
 // Wallet assets and listed rigs share the exact timestamp window, reward ABI and
 // claim/rate checks. Only the transport differs: wallet reads retain direct-call fallback.
 async function readRigProduction(rows, snap, signal, read) {
   let window = { blockTimestamp: snap.headTimestamp ?? null, previousHead: null, windowSeconds: null };
-  let measured = rows.map(row => ({ ...row, fabPerDay: null, status: 'unread' }));
+  let measured = rows.map(row => ({ ...row, fabPerDay: null, status: 'unread', diagnoses: diagnoseRig(null) }));
   let pendingAtoms = 0n, pendingKnown = 0, mining = 0, emission = null;
   const unavailable = error => { signal.throwIfAborted(); window.error ??= error.message; };
   const safeRead = async (calls, block) => {
@@ -687,13 +991,43 @@ async function readRigProduction(rows, snap, signal, read) {
       safeRead(calls([SEL.pendingWithDeweb, SEL.getMiner, SEL.dewebWeights]), snap.head),
       timing ? safeRead(calls([SEL.pendingWithDeweb, SEL.getMiner]), window.previousHead) : [],
     ]);
+    const miners = valid.map((_, i) => parseGetMiner(current[i * 3 + 1]));
+    // One optional constant batch only for rigs needing a diagnosis. Its short child
+    // deadline cannot discard already-read state or extend the wallet's total budget.
+    let processorMultiplier = null, cooldownBlocks = null;
+    if (miners.some(miner => miner && (miner.chainStatus !== 1 || miner.verifWeight === 0n))) {
+      try {
+        const constants = await deadline(childSignal => miningReads([
+          { data: '0x0f03daba' + pad(CFG.circuits), block: hex(snap.head) },
+          { data: '0x6f1e9d41', block: hex(snap.head) },
+        ], { multicall: true, signal: childSignal }), 800, signal);
+        try { processorMultiplier = abiUint(constants[0]); } catch { /* unread stays unknown */ }
+        try { cooldownBlocks = abiUint(constants[1]); } catch { /* unread stays unknown */ }
+      } catch { signal.throwIfAborted(); }
+    }
     valid.forEach(({ index }, i) => {
-      if (timing && emission) measured[index] = measuredEntry(rows[index],
-        [current[i * 3], previous[i * 2], current[i * 3 + 1], previous[i * 2 + 1], current[i * 3 + 2]], window, emission);
+      let pendingStatus = 'unknown';
       try {
         const pending = abiUint(current[i * 3]);
-        if (pending !== UINT256_MAX) { pendingAtoms += pending; pendingKnown++; if (pending > 0n) mining++; }
-      } catch { /* Unknown current rewards never become a fabricated balance. */ }
+        if (pending === UINT256_MAX) pendingStatus = 'unknown';
+        else {
+          pendingStatus = 'known';
+          pendingAtoms += pending;
+          pendingKnown++;
+          if (pending > 0n) mining++;
+        }
+      } catch { pendingStatus = 'unread'; }
+      measured[index] = measuredEntry(rows[index],
+        [current[i * 3], previous[i * 2], current[i * 3 + 1], previous[i * 2 + 1], current[i * 3 + 2]], window, emission);
+      measured[index].pendingStatus = pendingStatus;
+      measured[index].diagnoses = diagnoseRig(miners[i], { head: snap.head, processorMultiplier, cooldownBlocks });
+      if (measured[index].status === 'stopped' || measured[index].status === 'revoked') {
+        measured[index].measureStatus = 'stopped';
+      } else if (measured[index].status === 'measured') {
+        measured[index].measureStatus = 'mining';
+      } else {
+        measured[index].measureStatus = 'unread';
+      }
     });
   } catch (e) {
     unavailable(e);
@@ -740,6 +1074,11 @@ export async function loadEntryComparison(snap, opts = {}) {
 
 async function readEntryComparison(snap, signal) {
   if (!Number.isSafeInteger(snap.head) || snap.head <= 0) throw new Error('invalid entry block');
+  const emissionPromise = readEmissionBaseline(snap.head, signal).catch((error) => ({ error }));
+  const nandPromise = positive(snap.decision.nandOkb) ? Promise.resolve(null)
+    : deadline(s => nandOkbMarket(snap.head, snap.blockTime, { signal: s,
+      asOf: Number.isSafeInteger(snap.headTimestamp) ? new Date(snap.headTimestamp * 1000).toISOString() : undefined }),
+    CFG.nandQuoteTimeoutMs, signal).catch((error) => ({ error: error.message }));
   const last = abiUint(await rpc('eth_call', [{ to: CFG.rigMarket, data: SEL.nextListingId }, hex(snap.head)], { signal }));
   if (last > BigInt(CFG.entryMaxListingIds)) throw new Error('listing enumeration exceeds bounded scan');
   const totalScanned = Number(last), listings = [];
@@ -756,14 +1095,27 @@ async function readEntryComparison(snap, signal) {
       listings.push({ listingId: String(ids[i]), id, priceOkb, url: entryUrl(id) });
     });
   }
-  const { rows: measured, window, emission } = await readRigProduction(listings, snap, signal,
+  const emissionResult = await emissionPromise;
+  const nandResult = await nandPromise;
+  let entrySnap = snap;
+  if (nandResult && !nandResult.error && validNandPrice(nandResult)) {
+    entrySnap = applyNand(snap, nandResult.okb, marketSource(nandResult), nandResult);
+  } else if (nandResult?.error && !positive(snap.decision.nandOkb)) {
+    entrySnap = { ...snap, availability: { ...snap.availability, nand: available('unavailable', null, nandResult.error) } };
+  }
+  const { rows: measured, window, emission: windowEmission } = await readRigProduction(listings, snap, signal,
     (calls, block) => entryReads(calls, block, signal));
   signal.throwIfAborted();
+  const emission = emissionResult?.error ? null : emissionResult;
   const asOf = Number.isSafeInteger(window.blockTimestamp) && window.blockTimestamp > 0
     ? new Date(window.blockTimestamp * 1000).toISOString() : null;
-  return { ...entryComparison(snap, measured, { emissionRate: emission?.rate, unverifiedBps: emission?.unverifiedBps }), state: 'live', head: snap.head, asOf,
+  const baselineEmission = emission ?? windowEmission;
+  return { ...entryComparison(entrySnap, measured, { emissionRate: baselineEmission?.rate, unverifiedBps: baselineEmission?.unverifiedBps }), state: 'live', head: snap.head, asOf,
     ...window, totalScanned, validCount: listings.length, rateTolerancePct: 1,
-    prices: { fabUsd: snap.prices.fabUsd, okbUsd: snap.prices.okbUsd }, priceAsOf: snap.asOf ?? null, error: window.error ?? null };
+    prices: { fabUsd: snap.prices.fabUsd, okbUsd: snap.prices.okbUsd }, priceAsOf: snap.prices?.asOf ?? snap.asOf ?? null,
+    emissionError: emissionResult?.error?.message ?? null,
+    nandError: nandResult?.error ?? null,
+    error: window.error ?? emissionResult?.error?.message ?? nandResult?.error ?? null };
 }
 
 // USD value of output at a fixed FAB price scenario and compounded daily network growth.

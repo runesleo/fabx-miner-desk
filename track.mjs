@@ -2,7 +2,9 @@
 // Sends: a random per-browser id from local storage, '/' or '/rigs', zh|en, and the referrer hostname only.
 // Never throws into the page; silently does nothing where /api/hit does not exist (e.g. the DeWeb copy).
 
-const ENDPOINT = '/api/hit';
+import { apiUrl } from './api-url.mjs';
+import { normalizeSitePath } from './site-path.mjs';
+
 const CID_KEY = 'fmd.cid';
 
 function randomId(crypto) {
@@ -24,7 +26,8 @@ export function sendHit(env = globalThis) {
       cid = store.getItem(CID_KEY);
       if (!cid) { cid = randomId(env.crypto); store.setItem(CID_KEY, cid); }
     } catch { return null; }
-    const path = /^\/rigs\/?$/.test(loc?.pathname || '') ? '/rigs' : '/';
+    const path = normalizeSitePath(loc?.pathname || '/') ?? '/';
+    const page = path === '/rigs' ? '/rigs' : '/';
     let saved = null;
     try { saved = store.getItem('fmd.lang'); } catch {}
     const lang = saved === 'zh' || saved === 'en' ? saved : (String(nav.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
@@ -33,12 +36,13 @@ export function sendHit(env = globalThis) {
       const host = doc?.referrer ? new URL(doc.referrer).hostname : '';
       if (host && host !== loc?.hostname) ref = host;
     } catch {}
-    const payload = { cid, path, lang, ref };
+    const payload = { cid, path: page, lang, ref };
+    const endpoint = apiUrl('/api/hit', loc);
     const body = JSON.stringify(payload);
     let sent = false;
-    try { sent = typeof nav.sendBeacon === 'function' && nav.sendBeacon(ENDPOINT, new env.Blob([body], { type: 'application/json' })); } catch {}
+    try { sent = typeof nav.sendBeacon === 'function' && nav.sendBeacon(endpoint, new env.Blob([body], { type: 'application/json' })); } catch {}
     if (!sent && typeof env.fetch === 'function') {
-      env.fetch(ENDPOINT, { method: 'POST', body, keepalive: true, credentials: 'omit', headers: { 'content-type': 'application/json' } }).catch(() => {});
+      env.fetch(endpoint, { method: 'POST', body, keepalive: true, credentials: 'omit', headers: { 'content-type': 'application/json' } }).catch(() => {});
     }
     return payload;
   } catch { return null; }

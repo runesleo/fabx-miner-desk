@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从零开始 · FabX Miner Desk</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec; --accent: #2563e0; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37; --accent: #6b9bff; --on-accent: #0e1013; color-scheme: dark;
+    }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  header nav a { color: var(--accent); text-decoration: none; font-size: 14px; margin-right: 10px; }
+  .ghost { font: inherit; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  article h2 { font-size: 19px; margin: 0 0 8px; }
+  article h3 { font-size: 15px; margin: 14px 0 6px; }
+  article p, article li { margin: 0 0 8px; font-size: 15px; }
+  article ul, article ol { margin: 0 0 8px; padding-left: 1.25rem; }
+  article p.basis { color: var(--muted); font-size: 13px; margin-bottom: 0; }
+  article a { color: var(--accent); }
+  .toc { font-size: 14px; margin-bottom: 16px; }
+  .toc a { display: block; color: var(--accent); text-decoration: none; padding: 4px 0; }
+  .note { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 20px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <b id="title">从零开始</b>
+    <div>
+      <nav>
+        <a href="../" id="navDesk"></a>
+        <a href="../check/" id="navCheck"></a>
+        <a href="../faq/" id="navFaq"></a>
+        <a href="../links/" id="navLinks"></a>
+      </nav>
+      <button type="button" class="ghost" id="lang">EN</button>
+    </div>
+  </header>
+  <p class="note" id="intro"></p>
+  <p class="toc" id="toc"></p>
+
+  <article id="sec-wallet">
+    <h2 id="t-wallet"></h2>
+    <div id="body-wallet"></div>
+    <p class="basis" id="s-wallet"></p>
+  </article>
+  <article id="sec-fabx">
+    <h2 id="t-fabx"></h2>
+    <div id="body-fabx"></div>
+    <p class="basis" id="s-fabx"></p>
+  </article>
+  <article id="sec-tapeout">
+    <h2 id="t-tapeout"></h2>
+    <div id="body-tapeout"></div>
+    <p class="basis" id="s-tapeout"></p>
+  </article>
+  <article id="sec-desk">
+    <h2 id="t-desk"></h2>
+    <div id="body-desk"></div>
+    <p class="basis" id="s-desk"></p>
+  </article>
+
+  <footer id="footer"></footer>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</main>
+<script type="module">
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+const LINK = {
+  desk: '../',
+  check: '../check/',
+  checkFabx: '../check/#rig=1&chain=fabx',
+  links: '../links/',
+  fabxHome: 'https://fabx.tech/',
+  fabxPod: 'https://fabx.tech/zh/pod',
+  fabxCircuits: 'https://fabx.tech/en/circuits',
+  fabxMarket: 'https://fabx.tech/en/market/0xbe6f94115d32f3ac3252bc4626573e739beeb714-0',
+  fabxFormula: 'https://fabx.tech/zh/pod/formula',
+  tapeoutHome: 'https://tapeout.net/',
+  tapeoutPod: 'https://tapeout.net/pod',
+};
+
+const COPY = {
+  zh: {
+    title: '从零开始',
+    navDesk: '收益 Desk', navCheck: '矿机查验', navFaq: '常见问题', navLinks: '生态入口',
+    intro: '两条链的规则不要混用：FabX 在 X Layer，TapeOut PoD 在 BSC。下面只写机制文档里【已核实】的流程与参数；元件/NAND 现价与 gas 未在本文核实，请以官方页面为准。本站只读，不会连接钱包、签名或代你交易。',
+    footer: `更多官方链接见 <a href="${LINK.links}">生态入口</a>。不是投资建议。`,
+    sections: {
+      wallet: {
+        t: '钱包里要准备什么？',
+        html: `<p>无论哪条链，你都需要自己的钱包和该链原生 gas 代币（X Layer 用 OKB 付 gas，BSC 用 BNB）。挖矿产出分别是 $FAB（FabX）和 $BEM（TapeOut），【已核实】两边已验证池约占日产出的 99%，未验证池约 1%。</p>
+<p><strong>FabX（X Layer）</strong>：自建电路需要官方 NAND、LATCH 晶体管（工本里二者同权）；也可以在官方市场买现成电路 NFT。加速（质押 OKB/BEM 等）只存在于 FabX，规则见官方说明。</p>
+<p><strong>TapeOut（BSC）</strong>：同样用 NAND/LATCH 搭电路或买现成矿机；可挖处理器只有官方 TapeOut（P=1）与 Blonskr_No1 / Behemoth（P=6）两个，【已核实】链上读数与官方前端一致。</p>
+<p>晶体管总量、挂牌价、买一台现成矿机要花多少币：本文未核实，请到各自官方市场查看。</p>`,
+        s: '依据：mechanism-ssot §2.3、§2.5、§5（已核实常量与处理器）。',
+      },
+      fabx: {
+        t: '路线 A · FabX（X Layer）',
+        html: `<h3>买现成矿机</h3>
+<ol>
+<li>在 <a href="${LINK.fabxCircuits}" target="_blank" rel="noopener noreferrer">官方电路/矿机市场</a> 浏览已流片的电路 NFT（出处：<a href="${LINK.fabxHome}" target="_blank" rel="noopener noreferrer">fabx.tech</a> 导航）。</li>
+<li>用钱包连接 FabX 官网成交；成交后电路 NFT 在你地址下。是否已在挖要看链上 <code>status</code>，不是「买到就一定在挖」。</li>
+<li>成本 = 挂牌价 + gas；日产出份额取决于权重与全网总权重（会被稀释）。</li>
+</ol>
+<h3>自己建机并开挖</h3>
+<ol>
+<li>在 <a href="${LINK.fabxMarket}" target="_blank" rel="noopener noreferrer">官方 NAND/LATCH 市场</a> 购买元件，在画布设计电路并流片成 NFT。</li>
+<li>到 <a href="${LINK.fabxPod}" target="_blank" rel="noopener noreferrer">挖矿页</a>：先 <code>arm</code> 预约锚点区块，再在 <strong>200 个区块</strong>内 <code>start</code> 完成抽检开挖（FabX 的 <code>MAX_ANCHOR_AGE</code>，【已核实】）。</li>
+<li>认领题目且抽检通过 → 进已验证池（99% 产出按算力分）；<code>taskId=0</code> 或不认领 → 只进未验证池（1%）。门数超过 gas 闸门也只能进未验证池。</li>
+<li>算力公式：<strong>H = (b*×F + K_task·q) × P</strong>，P=6（FAB-Genesis 处理器）；F 为持有人链上加成，只乘工本 b*。【已核实】见 <a href="${LINK.fabxFormula}" target="_blank" rel="noopener noreferrer">官方公式页</a>。</li>
+</ol>
+<p>全网固定约 <strong>7,200 FAB/天</strong> 排放（99%/1% 分配），【已核实】；减半周期与 <code>startTime</code> 见官方「发行」说明。FabX 挖矿合约<strong>尚未封印</strong>，管理员仍可升级或暂停，与 BSC TapeOut 不同。</p>`,
+        s: '依据：mechanism-ssot §1.2、§2.1–§2.4、§5；官方 fabx.tech/zh/pod/formula。',
+      },
+      tapeout: {
+        t: '路线 B · TapeOut（BSC）',
+        html: `<p class="note" style="margin:0 0 10px;padding:10px;background:var(--bg);border-radius:8px">收益台可以查 <strong>BSC TapeOut</strong>：打开首页，选「BSC TapeOut」，输入地址就能看每台日产 BEM、哪台停了。FabX 的加速和 DeWeb 规则<strong>不能</strong>套用到 TapeOut。</p>
+<h3>买现成矿机</h3>
+<ol>
+<li>打开 <a href="${LINK.tapeoutHome}" target="_blank" rel="noopener noreferrer">tapeout.net</a>，在交易市场查看电路 NFT（出处：TapeOut 官方客户端）。</li>
+<li>链上成交后，矿机跟着 NFT 走；未领取收益也随 NFT 转移。</li>
+</ol>
+<h3>自己建机并开挖</h3>
+<ol>
+<li>铸造/购买 NAND、LATCH，在画布流片。</li>
+<li>到 <a href="${LINK.tapeoutPod}" target="_blank" rel="noopener noreferrer">BSC 挖矿页</a>：<code>arm</code> 后须在 <strong>64 个区块</strong>内 <code>start</code>（约 29 秒窗口，【已核实】官方文案）。</li>
+<li>算力：<strong>H = (b* + K_task·q) × P</strong>；TapeOut 处理器 P=1，Behemoth P=6。无 FabX 的 F 加成。</li>
+<li>题库已冻结（267 题），合约已封印（owner=0），【已核实】管理员不能再改规则。</li>
+</ol>
+<p>日产出约 <strong>7,200 BEM/天</strong>（同样 99%/1% 池），【已核实】。具体元件价、gas、挂单价以官方页面为准。</p>`,
+        s: '依据：mechanism-ssot §1.1、§2.1–§2.4、§5；tapeout.net 官方前端。',
+      },
+      desk: {
+        t: '用 Miner Desk 查看自己的矿机',
+        html: `<ol>
+<li>打开 <a href="${LINK.desk}">Miner Desk 首页</a>，输入你的 <strong>FabX（X Layer）钱包地址</strong>，点查询。本站只读，不上传私钥。</li>
+<li>资产卡列出该地址下的矿机、权重、待领收益与实测日产等；可展开「入场比价」对比买现成 vs 自建（仅 FabX 官方市场，不含第三方挂单）。</li>
+<li>想查某台矿机是否通过全部官方向量：打开 <a href="${LINK.checkFabx}">矿机查验</a>，选 FabX，输入电路编号。</li>
+<li>常见问题（领取、假矿机、产出下降）：见 <a href="../faq/">FAQ</a>。</li>
+</ol>
+<p>BSC TapeOut：在首页选「BSC TapeOut」后输入地址，就能看日产 BEM 和哪台停了。官方站仍在 <a href="${LINK.links}">生态入口</a>。</p>`,
+        s: '依据：本站功能说明；BSC 扩展状态见项目 README。',
+      },
+    },
+  },
+  en: {
+    title: 'Start from zero',
+    navDesk: 'Miner Desk', navCheck: 'Rig check', navFaq: 'FAQ', navLinks: 'Ecosystem links',
+    intro: 'Do not mix the two chains: FabX runs on X Layer, TapeOut PoD on BSC. Only mechanics marked verified in the mechanism notes appear below. Transistor/NAND spot prices and gas are not verified here—follow the official sites. This desk is read-only: no wallet connect, signing, or trading on your behalf.',
+    footer: `More official URLs: <a href="${LINK.links}">Ecosystem links</a>. Not investment advice.`,
+    sections: {
+      wallet: {
+        t: 'What should my wallet hold?',
+        html: `<p>On either chain you need your own wallet and native gas (OKB on X Layer, BNB on BSC). Mining pays $FAB on FabX and $BEM on TapeOut; verified pools receive about 99% of daily emission and unverified about 1% (verified on chain).</p>
+<p><strong>FabX (X Layer)</strong>: build with official NAND and LATCH transistors (equal weight in burn basis), or buy a ready-made circuit NFT on the official market. Staking boosts (OKB/BEM, etc.) exist only on FabX—see official docs.</p>
+<p><strong>TapeOut (BSC)</strong>: same transistor building blocks or buy a rig; only two minable processors—TapeOut (P=1) and Blonskr_No1 / Behemoth (P=6) per on-chain reads and the official UI.</p>
+<p>Total transistor supply, list prices, and exact cost of a rig: not verified in this page—check each official market.</p>`,
+        s: 'Basis: mechanism-ssot §2.3, §2.5, §5 (verified constants and processors).',
+      },
+      fabx: {
+        t: 'Route A · FabX (X Layer)',
+        html: `<h3>Buy a ready-made rig</h3>
+<ol>
+<li>Browse taped circuits on the <a href="${LINK.fabxCircuits}" target="_blank" rel="noopener noreferrer">official circuit market</a> (from <a href="${LINK.fabxHome}" target="_blank" rel="noopener noreferrer">fabx.tech</a> navigation).</li>
+<li>Connect your wallet on FabX to trade; after purchase the NFT is yours. Mining status is on-chain—buying does not guarantee mining.</li>
+<li>Cost = list price + gas; daily share depends on weight vs total network weight (dilution applies).</li>
+</ol>
+<h3>Build and start mining</h3>
+<ol>
+<li>Buy NAND/LATCH on the <a href="${LINK.fabxMarket}" target="_blank" rel="noopener noreferrer">official component market</a>, design on the canvas, and tape out.</li>
+<li>On the <a href="${LINK.fabxPod}" target="_blank" rel="noopener noreferrer">mining page</a>: <code>arm</code> an anchor block, then <code>start</code> within <strong>200 blocks</strong> (FabX <code>MAX_ANCHOR_AGE</code>, verified).</li>
+<li>Claim a task and pass sampling → verified pool (99%); <code>taskId=0</code> or no claim → unverified pool (1%). Circuits over the gas gate also land in the unverified pool only.</li>
+<li>Hashrate <strong>H = (b*×F + K_task·q) × P</strong> with P=6 on FAB-Genesis; F is the holder’s on-chain boost and applies only to b*. Verified formula: <a href="${LINK.fabxFormula}" target="_blank" rel="noopener noreferrer">official formula page</a>.</li>
+</ol>
+<p>About <strong>7,200 FAB/day</strong> fixed emission (99%/1% split), verified. Halving follows on-chain <code>startTime</code> and official issuance copy. FabX mining is <strong>not sealed</strong>—admin can still upgrade or pause, unlike BSC TapeOut.</p>`,
+        s: 'Basis: mechanism-ssot §1.2, §2.1–§2.4, §5; fabx.tech/zh/pod/formula.',
+      },
+      tapeout: {
+        t: 'Route B · TapeOut (BSC)',
+        html: `<p class="note" style="margin:0 0 10px;padding:10px;background:var(--bg);border-radius:8px"><strong>Miner Desk can look up BSC TapeOut.</strong> Open the desk, choose BSC TapeOut, and paste an address to see daily BEM and which rigs stopped. FabX boosts and DeWeb rules <strong>do not</strong> apply to TapeOut.</p>
+<h3>Buy a ready-made rig</h3>
+<ol>
+<li>Open <a href="${LINK.tapeoutHome}" target="_blank" rel="noopener noreferrer">tapeout.net</a> and use the marketplace (official client).</li>
+<li>After an on-chain sale the rig follows the NFT; unclaimed rewards follow the NFT too.</li>
+</ol>
+<h3>Build and start mining</h3>
+<ol>
+<li>Mint or buy NAND/LATCH, tape out on the canvas.</li>
+<li>On the <a href="${LINK.tapeoutPod}" target="_blank" rel="noopener noreferrer">BSC mining page</a>: call <code>arm</code>, then <code>start</code> within <strong>64 blocks</strong> (~29s window per official copy, verified).</li>
+<li>Hashrate <strong>H = (b* + K_task·q) × P</strong>; TapeOut P=1, Behemoth P=6. No FabX-style F boost.</li>
+<li>Task bank frozen at 267 tasks; contract sealed (owner=0)—admin cannot change rules anymore (verified).</li>
+</ol>
+<p>About <strong>7,200 BEM/day</strong> with the same 99%/1% split, verified. Component prices, gas, and listings: official pages only.</p>`,
+        s: 'Basis: mechanism-ssot §1.1, §2.1–§2.4, §5; tapeout.net official frontend.',
+      },
+      desk: {
+        t: 'Check your rigs in Miner Desk',
+        html: `<ol>
+<li>Open the <a href="${LINK.desk}">desk home</a>, enter your <strong>FabX (X Layer) address</strong>, and query. Read-only—no private keys.</li>
+<li>The asset card lists rigs, weights, pending rewards, and measured daily output; expand entry comparison for buy vs build (FabX official market only).</li>
+<li>To test all official vectors for one rig: <a href="${LINK.checkFabx}">Rig check</a> → FabX → enter the circuit ID.</li>
+<li>Mechanics FAQ: <a href="../faq/">FAQ</a>.</li>
+</ol>
+<p>BSC TapeOut: choose BSC TapeOut on the desk and paste an address to see daily BEM and which rigs stopped. Official sites stay on <a href="${LINK.links}">ecosystem links</a>.</p>`,
+        s: 'Basis: this site’s features; BSC rollout noted in the project README.',
+      },
+    },
+  },
+};
+
+const ORDER = ['wallet', 'fabx', 'tapeout', 'desk'];
+const ANCHOR = { wallet: 'sec-wallet', fabx: 'sec-fabx', tapeout: 'sec-tapeout', desk: 'sec-desk' };
+let lang = store.get('fmd.lang') === 'en' ? 'en' : 'zh';
+const $ = (id) => document.getElementById(id);
+
+function render() {
+  const t = COPY[lang];
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.title = `${t.title} · FabX Miner Desk`;
+  $('title').textContent = t.title;
+  $('navDesk').textContent = t.navDesk;
+  $('navCheck').textContent = t.navCheck;
+  $('navFaq').textContent = t.navFaq;
+  $('navLinks').textContent = t.navLinks;
+  $('intro').textContent = t.intro;
+  $('footer').innerHTML = t.footer;
+  $('lang').textContent = lang === 'zh' ? 'EN' : '中文';
+  $('toc').innerHTML = ORDER.map((key) => `<a href="#${ANCHOR[key]}">${t.sections[key].t}</a>`).join('');
+  for (const key of ORDER) {
+    const sec = t.sections[key];
+    $(`t-${key}`).textContent = sec.t;
+    $(`body-${key}`).innerHTML = sec.html;
+    $(`s-${key}`).textContent = sec.s;
+  }
+}
+$('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; store.set('fmd.lang', lang); render(); };
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全网看板 · FabX Miner Desk</title>
+<meta name="description" content="X Layer FabX 和 BSC TapeOut 的在挖矿机、权重、每天多挖 1 个币要花多少、买现成还是自建。只读。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%232f6fed%27/%3E%3Cpath d=%27M9 22V10h9M9 16h7M20 22l4-12%27 stroke=%27white%27 stroke-width=%273%27 fill=%27none%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #15181d; --muted: #68707c; --line: #e4e7ec;
+    --accent: #2563e0; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1013; --card: #171a1f; --ink: #e8eaee; --muted: #9aa2ae; --line: #2a2f37; --accent: #6b9bff; --on-accent: #0e1013; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  p, li { text-wrap: pretty; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 56px; display: grid; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  header b { font-size: 17px; }
+  nav { display: flex; gap: 10px; font-size: 13px; }
+  nav a { color: var(--accent); text-decoration: none; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+  h1 { font-size: 22px; line-height: 1.35; margin: 0; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .row span { color: var(--muted); }
+  .row strong { text-align: right; }
+  .small { color: var(--muted); font-size: 13px; margin: 0; }
+  .small a { color: var(--accent); }
+  .err { color: #c0362c; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <b>FabX Miner Desk</b>
+    <nav>
+      <a href="../">收益台</a>
+      <a href="../start/">入门</a>
+    </nav>
+  </header>
+  <h1>全网看板</h1>
+  <p class="small" id="status">正在读链上数据…</p>
+  <section class="card" id="fabx" aria-live="polite"></section>
+  <section class="card" id="bsc" aria-live="polite"></section>
+  <p class="small">只读，不签名，不构成建议。买现成和自建只比了 X Layer 上 FabX 的官方市场。BSC TapeOut 没有同一套元件报价，那几项写「暂无」。近 7 天是全网权重的变化，不是你自己矿机的收益。</p>
+  <p class="small"><a href="https://t.me/fabx_miner_desk_bot" target="_blank" rel="noopener">想每天收到？在 Telegram 机器人里发 /daily</a></p>
+</main>
+<script type="module">
+import { loadBoard, boardLines } from '../board.mjs';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function paint(id, title, rows) {
+  const root = document.getElementById(id);
+  root.innerHTML = `<h2>${esc(title)}</h2>${rows.map(([label, value]) =>
+    `<div class="row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}`;
+}
+
+const status = document.getElementById('status');
+try {
+  const view = await loadBoard();
+  const lines = boardLines(view);
+  paint('fabx', 'X Layer · FabX', lines.fabx);
+  paint('bsc', 'BSC · TapeOut', lines.bsc);
+  const when = view.asOf ? new Date(view.asOf).toLocaleString('zh-CN', { hour12: false }) : '';
+  status.textContent = view.errors.length
+    ? `有的数没读到，上面能显示的已经填上。${when}`
+    : `读数时间 ${when}`;
+} catch (error) {
+  status.textContent = '链上数据没读到，过会儿刷新再试。';
+  status.className = 'small err';
+}
+</script>
+  <p class="leolabs-credit" style="margin:4px 0 24px;text-align:center;font-size:12px"><a href="https://leolabs.me/?utm_source=fabx-miner-desk&amp;utm_content=credit" style="color:var(--muted,inherit);text-decoration:underline;text-underline-offset:3px">由 Leo Labs 出品 · Made by Leo Labs → leolabs.me</a></p>
+</body>
+</html>

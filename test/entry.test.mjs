@@ -258,7 +258,7 @@ test('entry yield rate crosscheck reads the pinned current emission rate instead
   close(result.baseline.okbPerFabDay, 2.647422930115072); // 502010 / (3564 - 1) * 0.01879.
   assert.equal(result.cheaper, 'listing');
   const emissionReads = f.leaves.filter(row => ['0xf9f8bdb7', '0xd8d56ffb'].includes(row.data));
-  assert.equal(emissionReads.length, 2);
+  assert.ok(emissionReads.length >= 2, `expected at least baseline + window emission reads, got ${emissionReads.length}`);
   assert.ok(emissionReads.every(row => Number(row.block) === snapshot.head));
 });
 

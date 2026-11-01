@@ -5,7 +5,7 @@ import * as engine from '../desk.mjs';
 const snap = {
   head: 80_000_000,
   blockTime: 2,
-  network: { weight: 600_000, fabPerNandDay: 0.5 },
+  network: { weight: 600_000, fabPerNandDay: 0.5, verifiedFabPerDay: 7128 },
   prices: { fabUsd: 2, okbUsd: 50 },
   decision: { nandOkb: 0.2 },
 };
@@ -109,6 +109,7 @@ function fakeRpc(t, respond, api) {
 }
 
 test('networkGrowth reads the historical block and compounds its daily rate', async (t) => {
+  const engine = await import(`../desk.mjs?ng=${encodeURIComponent(t.name)}`);
   fakeRpc(t, ({ method, params }) => {
     assert.equal(method, 'eth_call');
     assert.deepEqual(params, [{ to: engine.CFG.mining, data: '0xef6aff46' }, hex(79_697_600)]);
@@ -120,11 +121,13 @@ test('networkGrowth reads the historical block and compounds its daily rate', as
 });
 
 test('networkGrowth reports unmeasured zero when historical state is unavailable', async (t) => {
+  const engine = await import(`../desk.mjs?ng=${encodeURIComponent(t.name)}`);
   fakeRpc(t, () => ({ error: { code: -32000, message: 'missing trie node' } }));
   assert.deepEqual(await engine.networkGrowth(snap), { measured: false, daily: 0 });
 });
 
 test('networkGrowth does not treat empty historical state as measured zero growth', async (t) => {
+  const engine = await import(`../desk.mjs?ng=${encodeURIComponent(t.name)}`);
   fakeRpc(t, () => ({ result: '0x0' }));
   assert.deepEqual(await engine.networkGrowth(snap), { measured: false, daily: 0 });
 });
@@ -142,6 +145,8 @@ function fakeWalletRpc(t, rigs, head, options = {}) {
     if (selector === '0xbce38bd7') return { error: { code: 3, message: 'execution reverted' } };
     if (selector === '0xf9f8bdb7') return { result: options.missingEmission ? null : `0x${word(8333333)}` };
     if (selector === '0xd8d56ffb') return { result: `0x${word(100)}` };
+    if (selector === '0x0f03daba') return { result: `0x${word(6)}` };
+    if (selector === '0x6f1e9d41') return { result: `0x${word(1200)}` };
     const id = Number(BigInt(`0x${data.slice(-64)}`));
     const rig = rigs.find((row) => row.id === id), current = Number(block) === head;
     if (selector === '0x6352211e') return { result: rig ? `0x${engine.CFG.exampleWallet.slice(2).padStart(64, '0')}` : null };
@@ -150,6 +155,7 @@ function fakeWalletRpc(t, rigs, head, options = {}) {
       const fields = Array(23).fill(0n);
       fields[0] = BigInt(engine.CFG.circuits); fields[1] = BigInt(id);
       fields[8] = BigInt(head * 2 - 3600); fields[9] = 1n;
+      fields[2] = 1n; fields[19] = rig.zeroWeight ? 0n : 1n;
       fields[21] = rig.claimed && current ? 1n : 0n;
       return { result: '0x' + fields.map(word).join('') };
     }
@@ -169,14 +175,18 @@ test('wallet exposes per-rig realtime reward status and only totals the measured
     { id: 15, missingKey: true }, { id: 16, now: 0, before: 0, zeroWeight: true },
   ], head);
   const result = await engine.wallet(engine.CFG.exampleWallet, { ...snap, head });
-  assert.deepEqual(result.rigs, [
-    { id: '11', fabPerDay: 144, status: 'mining' },
-    { id: '12', fabPerDay: 0, status: 'stopped' },
-    { id: '13', fabPerDay: null, status: 'claimed-in-window' },
-    { id: '14', fabPerDay: null, status: 'unread' },
-    { id: '15', fabPerDay: null, status: 'unread' },
-    { id: '16', fabPerDay: 0, status: 'stopped' },
+  assert.deepEqual(result.rigs.map(({ taskId, stopBlock, pool, poolShares, diagnoses, ...production }) => production), [
+    { id: '11', fabPerDay: 144, status: 'mining', chainStatus: 1, measureStatus: 'mining', pendingStatus: 'known' },
+    { id: '12', fabPerDay: 0, status: 'stopped', chainStatus: 1, measureStatus: 'stopped', pendingStatus: 'known' },
+    { id: '13', fabPerDay: null, status: 'claimed-in-window', chainStatus: 1, measureStatus: 'unread', pendingStatus: 'known' },
+    { id: '14', fabPerDay: null, status: 'unread', chainStatus: 1, measureStatus: 'unread', pendingStatus: 'unread' },
+    { id: '15', fabPerDay: null, status: 'unread', chainStatus: null, measureStatus: 'unread', pendingStatus: 'unknown' },
+    { id: '16', fabPerDay: 0, status: 'stopped', chainStatus: 1, measureStatus: 'stopped', pendingStatus: 'known' },
   ]);
+  assert.deepEqual(result.rigs.map(row => row.pool), ['verified', null, 'verified', 'verified', null, null]);
+  assert.deepEqual(result.rigs[0].poolShares, { verified: 1, unverified: 0 });
+  assert.deepEqual(result.rigs[0].diagnoses, []);
+  assert.ok(result.rigs[4].diagnoses.some(item => item.code === 'state_unknown'));
   assert.equal(result.circuits, 6);
   assert.equal(result.measured, 3);
   assert.equal(result.unread, 2);
@@ -202,11 +212,13 @@ test('wallet excludes claims with a positive delta instead of changing its obser
     { id: 13, now: 0, before: 0, zeroWeight: true },
   ], head);
   const result = await engine.wallet(engine.CFG.exampleWallet, { ...snap, head });
-  assert.deepEqual(result.rigs, [
-    { id: '11', fabPerDay: null, status: 'claimed-in-window' },
-    { id: '12', fabPerDay: null, status: 'claimed-in-window' },
-    { id: '13', fabPerDay: 0, status: 'stopped' },
+  assert.deepEqual(result.rigs.map(({ taskId, stopBlock, pool, poolShares, diagnoses, ...production }) => production), [
+    { id: '11', fabPerDay: null, status: 'claimed-in-window', chainStatus: 1, measureStatus: 'unread', pendingStatus: 'known' },
+    { id: '12', fabPerDay: null, status: 'claimed-in-window', chainStatus: 1, measureStatus: 'unread', pendingStatus: 'known' },
+    { id: '13', fabPerDay: 0, status: 'stopped', chainStatus: 1, measureStatus: 'stopped', pendingStatus: 'known' },
   ]);
+  assert.equal(result.rigs[0].pool, 'verified');
+  assert.equal(result.rigs[0].poolShares, null, 'unknown yield cannot receive forecast shares');
   assert.equal(result.windowSeconds, 600);
   assert.equal(result.measured, 1);
   assert.equal(result.skipped, 2);
