@@ -120,39 +120,152 @@
     .future-table th, .future-table td { padding: 8px 2px; font-size: 11px; }
   }
   @media (prefers-reduced-motion: no-preference) { .card { transition: opacity .2s; } }
-  .view-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
-  .view-tabs button { font: inherit; font-size: 15px; font-weight: 600; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); padding: 8px 4px; margin-right: 12px; cursor: pointer; }
-  .view-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-  .radar-list { display: grid; gap: 10px; margin-top: 14px; }
-  .radar-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); min-width: 0; }
-  .radar-item h3 { margin: 0; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
-  .radar-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-  .radar-badge { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--ink); }
-  .radar-ends { color: var(--warn); }
-  .radar-summary { margin: 6px 0 0; font-size: 14px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-  .radar-link { display: inline-block; margin-top: 6px; font-size: 14px; color: var(--accent); text-decoration: none; }
+  /* Header + homepage tabs + TapeOut radar (2026-11 redesign). */
+  header { gap: 12px; flex-wrap: wrap; }
+  header b { display: inline-flex; align-items: center; gap: 8px; }
+  header b::before { content: ""; width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #7c5cff); flex: none; }
+  .site-nav { display: flex; gap: 2px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+  .site-nav a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 8px; }
+  .site-nav a:hover { color: var(--ink); background: var(--soft); }
+  body.hub .calc-only, body:not(.hub) .hub-only { display: none !important; }
+  body.hub main { max-width: 1080px; }
+  .calc-back { margin: 0; }
+  #radarView { display: grid; gap: 14px; grid-template-areas: "hero" "main" "eco" "side"; }
+  .radar-hero { grid-area: hero; }
+  .hub-main { grid-area: main; display: grid; gap: 12px; min-width: 0; align-content: start; }
+  .hub-side { grid-area: side; display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .hub-eco { grid-area: eco; display: grid; gap: 12px; min-width: 0; }
+  .side-cta, .side-more { display: block; text-decoration: none; border-radius: 14px; padding: 14px 16px; }
+  .side-cta { color: var(--on-accent); background: linear-gradient(135deg, var(--accent), #7c5cff); }
+  .side-cta b { display: block; font-size: 15px; }
+  .side-cta span { display: block; margin-top: 2px; font-size: 13px; opacity: .9; }
+  .side-more { color: var(--ink); background: var(--card); border: 1px solid var(--line); }
+  .side-more b { display: block; font-size: 14px; }
+  .side-more b::after { content: " ↗"; color: var(--accent); }
+  .side-more span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .feedback-box input { font-family: inherit; }
+  @media (min-width: 960px) {
+    #radarView { grid-template-columns: minmax(0, 1fr) 320px; column-gap: 24px; row-gap: 18px; grid-template-areas: "hero hero" "main side" "eco eco"; }
+    .hub-side { position: sticky; top: 16px; }
+    #radarView .eco-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    #radarView .tools-grid { grid-template-columns: 1fr; }
+  }
+  @media (min-width: 680px) and (max-width: 959px) { #radarView .eco-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .radar-hero { position: relative; overflow: hidden; border-radius: 18px; padding: 22px 20px 18px; border: 1px solid var(--line);
+    background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, #7c5cff 16%, transparent), transparent 55%),
+      radial-gradient(120% 140% at 0% 100%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%), var(--card); }
+  .radar-live { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 12px; font-weight: 600; color: var(--good); }
+  .radar-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 0 currentColor; }
+  @media (prefers-reduced-motion: no-preference) { .radar-live::before { animation: radar-ping 2s ease-out infinite; } }
+  @keyframes radar-ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+  .radar-hero h1 { margin: 8px 0 0; font-size: 26px; line-height: 1.25; letter-spacing: -.02em; }
+  .radar-hero .sub { margin-top: 8px; }
+  .radar-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+  .radar-stat { background: color-mix(in srgb, var(--card) 70%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+  .radar-stat strong { display: block; font: 700 22px/1.2 var(--mono); }
+  .radar-stat span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .radar-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .radar-chips::-webkit-scrollbar { display: none; }
+  .radar-chip { font: inherit; font-size: 13px; white-space: nowrap; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  .radar-chip span { color: var(--muted); font-family: var(--mono); margin-left: 2px; }
+  .radar-chip[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .radar-chip[aria-pressed="true"] span { color: inherit; opacity: .7; }
+  .radar-list { display: grid; gap: 10px; }
+  .radar-item { --m: var(--muted); position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px 18px; min-width: 0; transition: border-color .15s, transform .15s; }
+  .radar-item::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--m); }
+  .radar-item:hover { border-color: color-mix(in srgb, var(--m) 45%, var(--line)); }
+  .m-launch { --m: var(--accent); } .m-competition { --m: #8b5cf6; } .m-claim { --m: var(--good); } .m-mint { --m: #e0458b; }
+  .m-allowlist { --m: #e07b20; } .m-yield { --m: #0f9aa6; } .m-points { --m: var(--warn); } .m-quest { --m: #4f7cff; }
+  .m-node { --m: #6d7ce8; } .m-creator { --m: #c2410c; }
+  .radar-top { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: 0; font-size: 12px; color: var(--muted); }
+  .radar-badge { font-weight: 600; color: var(--m); background: color-mix(in srgb, var(--m) 12%, transparent); border-radius: 6px; padding: 1px 8px; }
+  .radar-new { font-weight: 700; font-size: 11px; color: var(--on-accent); background: var(--bad); border-radius: 6px; padding: 1px 6px; letter-spacing: .02em; }
+  .radar-ago { margin-left: auto; }
+  .radar-item h3 { margin: 8px 0 0; font-size: 16px; line-height: 1.45; font-weight: 650; overflow-wrap: anywhere; }
+  .radar-summary { margin: 4px 0 0; font-size: 14px; line-height: 1.55; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .radar-foot { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .radar-source { font-family: var(--mono); }
+  .radar-ends { color: var(--warn); font-weight: 600; }
+  .radar-link { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; padding: 4px 10px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .radar-link:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .radar-state { margin: 0; padding: 18px; text-align: center; font-size: 14px; color: var(--muted); background: var(--card); border: 1px dashed var(--line); border-radius: 14px; }
+  .radar-next { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .radar-next a, .radar-next button { font: inherit; text-align: left; display: block; color: var(--ink); text-decoration: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; cursor: pointer; min-width: 0; }
+  .radar-next a:hover, .radar-next button:hover { border-color: var(--accent); }
+  .radar-next b { display: block; font-size: 14px; }
+  .radar-next b::after { content: " →"; color: var(--accent); }
+  .radar-next span { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .brand-badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; letter-spacing: 0; }
+  .hub-section { margin-top: 4px; }
+  .hub-section h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+  .hub-section .small { margin: 2px 0 0; }
+  .tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .eco-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; }
+  .eco-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; font-size: 12px; color: var(--muted); }
+  .eco-role { font-weight: 600; border-radius: 6px; padding: 1px 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  .eco-role.r-protocol { color: #7c5cff; background: color-mix(in srgb, #7c5cff 12%, transparent); }
+  .eco-role.r-community { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+  .eco-recent { color: var(--warn); font-weight: 600; }
+  .eco-card h3 { margin: 8px 0 0; font-size: 16px; }
+  .eco-desc { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); flex: 1; }
+  .eco-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .eco-links a { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; padding: 3px 9px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+  .eco-links a:hover { background: color-mix(in srgb, var(--accent) 17%, transparent); }
+  @media (max-width: 520px) {
+    .radar-next { grid-template-columns: 1fr; }
+    .eco-grid { grid-template-columns: 1fr; }
+    .radar-hero { padding: 18px 16px 16px; }
+    .radar-hero h1 { font-size: 23px; }
+    .radar-stat { padding: 8px 10px; }
+    .radar-stat strong { font-size: 19px; }
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <header><b id="appTitle">FabX Miner Desk</b><nav style="display:flex;gap:10px;align-items:center;font-size:13px;flex-wrap:wrap"><a href="../start/" style="color:var(--accent);text-decoration:none" id="navStart">入门</a><a href="../links/" style="color:var(--accent);text-decoration:none" id="navLinks">入口</a><a href="../check/" style="color:var(--accent);text-decoration:none" id="navCheck">查验</a><a href="../faq/" style="color:var(--accent);text-decoration:none" id="navFaq">FAQ</a><a href="../board/" style="color:var(--accent);text-decoration:none" id="navBoard">看板</a><button class="ghost" id="lang"></button></nav></header>
+  <header><b id="appTitle">FabX Miner Desk</b><nav class="site-nav"><a href="#now" class="hub-only" id="hubNavNow"></a><a href="#ecosystem" class="hub-only" id="hubNavEco"></a><a href="#tools" class="hub-only" id="hubNavTools"></a><a href="../start/" class="calc-only" id="navStart">入门</a><a href="../links/" class="calc-only" id="navLinks">入口</a><a href="../check/" class="calc-only" id="navCheck">查验</a><a href="../faq/" class="calc-only" id="navFaq">FAQ</a><a href="../board/" class="calc-only" id="navBoard">看板</a><button class="ghost" id="lang"></button></nav></header>
 
-  <div class="view-tabs" role="tablist" aria-label="Views">
-    <button type="button" role="tab" id="tabRadar" aria-controls="radarView" aria-selected="true"></button>
-    <button type="button" role="tab" id="tabCalc" aria-controls="calcView" aria-selected="false"></button>
-  </div>
+  <p class="calc-back calc-only"><button type="button" class="link" id="tabRadar"></button></p>
 
-  <section class="card" id="radarView" role="tabpanel" aria-labelledby="radarTitle">
-    <h2 id="radarTitle" style="margin:0"></h2>
-    <p class="sub" id="radarSub"></p>
-    <p class="small" id="radarState" role="status"></p>
-    <div class="radar-list" id="radarList" aria-live="polite"></div>
-    <p class="small" style="margin:14px 0 0"><button type="button" class="link" id="radarCalc"></button></p>
-    <p class="small" style="margin:6px 0 0"><a id="radarMore" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none"></a></p>
+  <section id="radarView" aria-labelledby="radarTitle">
+    <div class="radar-hero">
+      <p class="radar-live" id="radarLive"></p>
+      <h1 id="radarTitle"></h1>
+      <p class="sub" id="radarSub"></p>
+      <div class="radar-stats" id="radarStats"></div>
+    </div>
+    <div class="hub-main" id="now">
+      <div class="hub-section">
+        <h2 id="nowTitle"></h2>
+        <p class="small" id="nowSub"></p>
+      </div>
+      <div class="radar-chips" id="radarChips" role="toolbar" aria-label="Filter"></div>
+      <p class="radar-state" id="radarState" role="status"></p>
+      <div class="radar-list" id="radarList" aria-live="polite"></div>
+    </div>
+    <aside class="hub-side" id="tools">
+      <a class="side-cta" id="radarBot" target="_blank" rel="noopener"><b id="radarBotTitle"></b><span id="radarBotBody"></span></a>
+      <div class="hub-section"><h2 id="toolsTitle"></h2></div>
+      <div class="radar-next tools-grid">
+        <button type="button" id="radarCalc"><b id="toolCalcTitle"></b><span id="toolCalcBody"></span></button>
+        <a href="../check/"><b id="toolCheckTitle"></b><span id="toolCheckBody"></span></a>
+        <a href="../board/"><b id="toolBoardTitle"></b><span id="toolBoardBody"></span></a>
+        <a href="../start/"><b id="toolStartTitle"></b><span id="toolStartBody"></span></a>
+      </div>
+      <a class="side-more" id="radarMore" target="_blank" rel="noopener"><b id="radarMoreTitle"></b><span id="radarMoreBody"></span></a>
+    </aside>
+    <div class="hub-eco" id="ecosystem">
+      <div class="hub-section">
+        <h2 id="ecoTitle"></h2>
+        <p class="small" id="ecoSub"></p>
+      </div>
+      <div class="eco-grid" id="ecoList"></div>
+    </div>
   </section>
 
-  <div id="calcView" role="tabpanel" aria-labelledby="tabCalc" style="display:contents" hidden>
+  <div id="calcView" role="tabpanel" style="display:contents" hidden>
   <aside class="card risk" id="newbieRisk" aria-labelledby="riskTitle">
     <h2 id="riskTitle"></h2>
     <details class="rig-list" id="riskDetails">
@@ -337,7 +450,8 @@ import { BSC_ADDRESS_LOOKUP, fetchBscRigs } from '../bsc-rigs-client.mjs';
 import { buildAssetUrl, parseDeepLink, shareCardSpec, drawShareCard, shortAddress, isDeskEntryPath } from '../share.mjs';
 import { apiUrl } from '../api-url.mjs';
 import { normalizeSitePath } from '../site-path.mjs';
-import { RADAR_MORE, fetchRadar, radarCards, radarText } from '../radar-view.mjs';
+import { RADAR_BOT, RADAR_MORE, fetchRadar, radarCards, radarFilters, radarStats, radarText } from '../radar-view.mjs';
+import { ECOSYSTEM_CHECKED, PROJECTS, ecosystemCards, ecosystemText, radarCounts } from '../ecosystem.mjs';
 
 const BUDGETS = [100, 500, 2000];
 const T = {
@@ -490,7 +604,7 @@ const T = {
     ],
     kv: { fab: 'FAB', median: 'FAB 24h 中位', range: 'FAB 24h 区间', bem: 'BEM', okb: 'OKB', nand: 'NAND', cap: '多挖每天 1 FAB 的成本', net: '全网算力（NAND 当量）', miners: '当前在挖矿机数', sealed: '合约封存', yes: '是', no: '否，团队仍可加处理器', nandSrc: (h, q) => `近 ${h}h ${q.toLocaleString()} 个` },
     footer: '只读工具：不连钱包也能用，不签名、不发交易。数据有延迟，不是投资建议。',
-    navStart: '入门', navLinks: '生态入口', navCheck: '查验', navFaq: '常见问题',
+    navStart: '入门', navLinks: '官方链接', navCheck: '查验', navFaq: '常见问题',
     fbTitle: '反馈：缺什么、哪里不对，一句话告诉我们（不用登录）。', fbPh: '例如：想看 BSC 上 TapeOut 的矿机', fbGo: '发送',
     fbSending: '发送中…', fbOk: '收到，谢谢。能修的会直接修。', fbEmpty: '写一句再发。', fbFail: '发送失败，请稍后重试；镜像站点可能不支持。',
     shareBtn: '分享快照', shareSave: '保存图片', shareCopy: '复制链接', shareCopied: '链接已复制', shareFail: '分享失败，请重试',
@@ -644,7 +758,7 @@ const T = {
     ],
     kv: { fab: 'FAB', median: 'FAB 24h median', range: 'FAB 24h range', bem: 'BEM', okb: 'OKB', nand: 'NAND', cap: 'Cost of +1 FAB/day', net: 'Network hashpower (NAND-eq.)', miners: 'Miners currently mining', sealed: 'Contract sealed', yes: 'yes', no: 'no, team can add processors', nandSrc: (h, q) => `${q.toLocaleString()} in ${h}h` },
     footer: 'Read-only: works without a wallet, never signs or sends. Data can lag. Not investment advice.',
-    navStart: 'Start', navLinks: 'Links', navCheck: 'Rig check', navFaq: 'FAQ',
+    navStart: 'Start', navLinks: 'Official links', navCheck: 'Rig check', navFaq: 'FAQ',
     fbTitle: 'Feedback: what is missing or wrong, in one line (no login).', fbPh: 'e.g. show TapeOut rigs on BSC too', fbGo: 'Send',
     fbSending: 'Sending…', fbOk: 'Got it, thanks. Fixable things get fixed.', fbEmpty: 'Write a line first.', fbFail: 'Could not send; try again later. Mirror copies may not support it.',
     shareBtn: 'Share snapshot', shareSave: 'Save image', shareCopy: 'Copy link', shareCopied: 'Link copied', shareFail: 'Share failed; try again',
@@ -898,9 +1012,8 @@ const saveRule = () => store.set('fmd.rule', JSON.stringify(rule));
 
 function applyStatic() {
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-  document.title = L.appTitle;
+  syncTitle();
   document.querySelector?.('meta[name="description"]')?.setAttribute('content', L.description);
-  $('appTitle').textContent = L.appTitle;
   for (const id of ['navStart', 'navLinks', 'navCheck', 'navFaq', 'navBoard', 'alertTitle', 'alertBody', 'alertThresholdLabel', 'alertThresholdSuffix', 'alertGo', 'alertBotLink', 'cheapTitle', 'cheapBody', 'cheapThresholdLabel', 'cheapThresholdSuffix', 'cheapGo', 'lang', 'todayEyebrow', 'investQ', 'mineQ', 'mine', 'go', 'readOnly', 'example', 'moreLabel', 'primer', 'netH', 'nandH', 'apply', 'ruleH', 'ruleOnL', 'ruleAdd', 'methodH', 'footer', 'manualNand', 'entryTitle', 'entryRetry', 'entryScope', 'entryCosts', 'entryTop', 'entryMethodTitle', 'entryMethod', 'entryDetailTitle', 'riskDetailTitle', 'riskText', 'basicsTitle', 'basicsContent', 'basicsSource', 'firstStepsTitle', 'firstStepsNote', 'officialHome', 'officialRigs', 'officialNand', 'officialVerified', 'already', 'fbTitle', 'fbGo']) $(id).textContent = L[id];
   $('fbText').placeholder = L.fbPh;
   $('cheapLink').textContent = L.alertBotLink;
@@ -1822,30 +1935,70 @@ $('lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; L = T[lang]; sto
 // Homepage tabs (2026-11): the TapeOut ecosystem radar first, the payback calculator second. Rig pages, shared asset
 // links and #calc open on the calculator.
 let radarState = { status: 'loading', items: [] };
+let radarMethod = 'all';
 function renderRadar() {
   const R = radarText(lang);
-  $('tabRadar').textContent = R.tabRadar;
-  $('tabCalc').textContent = R.tabCalc;
+  const E = ecosystemText(lang);
+  $('tabRadar').textContent = R.back;
+  $('hubNavNow').textContent = R.nav.now;
+  $('hubNavEco').textContent = R.nav.eco;
+  $('hubNavTools').textContent = R.nav.tools;
+  $('radarLive').textContent = R.live;
   $('radarTitle').textContent = R.title;
   $('radarSub').textContent = R.sub;
-  $('radarCalc').textContent = R.calcHint;
-  $('radarMore').textContent = `${R.more} ↗`;
+  $('nowTitle').textContent = R.nowTitle;
+  $('nowSub').textContent = R.nowSub;
+  $('radarBotTitle').textContent = R.botTitle;
+  $('radarBotBody').textContent = R.botBody;
+  $('radarBot').href = RADAR_BOT;
+  $('radarMoreTitle').textContent = R.moreTitle;
+  $('radarMoreBody').textContent = R.moreBody;
   $('radarMore').href = RADAR_MORE;
-  const cards = radarState.status === 'ok' ? radarCards(radarState.items, lang) : '';
+  $('ecoTitle').textContent = E.title;
+  $('ecoSub').textContent = E.sub(ECOSYSTEM_CHECKED);
+  $('toolsTitle').textContent = R.toolsTitle;
+  for (const [id, key] of [['Calc', 'calc'], ['Check', 'check'], ['Board', 'board'], ['Start', 'start']]) {
+    $(`tool${id}Title`).textContent = R.tools[key][0];
+    $(`tool${id}Body`).textContent = R.tools[key][1];
+  }
+  const ok = radarState.status === 'ok';
+  const stats = { ...radarStats(ok ? radarState.items : []), projects: PROJECTS.length };
+  $('radarStats').innerHTML = ['open', 'projects', 'sources']
+    .map((k) => `<div class="radar-stat"><strong>${ok || k === 'projects' ? stats[k] : '–'}</strong><span>${R.stats[k]}</span></div>`).join('');
+  const chips = ok ? radarFilters(radarState.items, lang, radarMethod) : '';
+  if (!chips) radarMethod = 'all';
+  $('radarChips').innerHTML = chips;
+  $('radarChips').hidden = !chips;
+  const cards = ok ? radarCards(radarState.items, lang, Date.now(), radarMethod) : '';
   $('radarList').innerHTML = cards;
   $('radarState').textContent = radarState.status === 'loading' ? R.loading : radarState.status === 'error' ? R.error : cards ? '' : R.empty;
   $('radarState').hidden = !$('radarState').textContent;
+  $('ecoList').innerHTML = ecosystemCards(lang, ok ? radarCounts(radarState.items) : {});
+  syncTitle();
 }
+// The site is the TapeOut hub; the calculator tab and /rigs keep the FabX tool name.
+function syncTitle() {
+  const R = radarText(lang);
+  const calc = $('radarView').hidden;
+  document.title = calc ? L.appTitle : R.docTitle;
+  $('appTitle').textContent = calc ? L.appTitle : R.siteName;
+  if (!calc) $('appTitle').insertAdjacentHTML?.('beforeend', ` <span class="brand-badge">${R.unofficial}</span>`);
+}
+$('radarChips').onclick = (event) => {
+  const chip = event.target.closest?.('[data-method]');
+  if (!chip) return;
+  radarMethod = chip.dataset.method;
+  renderRadar();
+};
 function setView(view, { remember = true } = {}) {
   const calc = view === 'calc';
   $('radarView').hidden = calc;
   $('calcView').hidden = !calc;
-  $('tabRadar').setAttribute('aria-selected', String(!calc));
-  $('tabCalc').setAttribute('aria-selected', String(calc));
+  document.body?.classList?.toggle('hub', !calc);
+  syncTitle();
   if (remember) history.replaceState(null, '', `${location.pathname}${location.search}${calc ? '#calc' : ''}`);
 }
-$('tabRadar').onclick = () => setView('radar');
-$('tabCalc').onclick = () => setView('calc');
+$('tabRadar').onclick = () => { setView('radar'); window.scrollTo({ top: 0 }); };
 $('radarCalc').onclick = () => { setView('calc'); window.scrollTo({ top: 0 }); };
 {
   const deep = parseDeepLink(location.href);

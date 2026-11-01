@@ -2,7 +2,7 @@
 // Cron: re-measure every watched address with the same read-only engine as the site and send a
 // Telegram message when a rig's income-relevant state changes (revoked, stopped, demoted, NFT
 // transfer, measured output drop) or when FabX PodMining emits a governance event.
-// Webhook: the Telegram bot (/start, /watch, /unwatch, /list, /feedback, /cheap, /threshold, /daily, /zh, /en, /stop, /help).
+// Webhook: the Telegram bot (/start, /watch, /unwatch, /list, /feedback, /cheap, /threshold, /daily, /tapeout, /zh, /en, /stop, /help).
 // A website button opens t.me/<bot>?start=<one-time token>; /start redeems it and binds the chat.
 // /start zh|en still picks a language. Otherwise the chat's stored language is kept, and only a chat
 // never seen before falls back to the Telegram client language. Every reply uses that one language.
@@ -20,6 +20,7 @@ import { runMarketUpdate } from './market.mjs';
 import { runBscIndex } from './bsc-index.mjs';
 import { runCheapAlerts } from './cheap.mjs';
 import { runDailyBoard } from './daily.mjs';
+import { loadRadarFeed, radarNowText, runRadarAlerts, RADAR_DAILY_CAP } from './radar.mjs';
 import { normalizeThreshold, redeemBindToken, BOT_USERNAME } from './bind.mjs';
 
 export { BOT_USERNAME };
@@ -36,8 +37,8 @@ const fmt = n => n == null ? '?' : (Math.round(n * 1000) / 1000).toString();
 
 const TEXT = {
   zh: {
-    start: (n) => `已连接。${n ? `你的 Telegram 用户名在网站上登记了 ${n} 个地址，` : ''}矿机收益异动（撤销、停挖、失去最优首创、NFT 转手、产出骤降）或 FabX 挖矿合约治理动作时会在这里通知你。\n\n命令：\n/watch 0x地址 — 盯一个地址\n/unwatch 0x地址 — 取消\n/list — 查看在盯的地址\n/feedback 一句话 — 提建议或报问题\n/cheap — 开关便宜矿机提醒\n/threshold 20 — 比自建便宜至少百分之几才提醒\n/daily — 每天收一条全网看板\n/stop — 关闭全部提醒\n\n从网页订阅请点「用 Telegram 订阅」。只发 /start、链接过期或已经用过，都不会订上。发 /daily 每天收一条全网看板。`,
-    help: '命令：/watch 0x地址、/unwatch 0x地址、/list、/feedback 一句话、/cheap、/threshold 20、/daily、/en、/stop。网站：',
+    start: (n) => `已连接。${n ? `你的 Telegram 用户名在网站上登记了 ${n} 个地址，` : ''}矿机收益异动（撤销、停挖、失去最优首创、NFT 转手、产出骤降）或 FabX 挖矿合约治理动作时会在这里通知你。\n\n命令：\n/watch 0x地址 — 盯一个地址\n/unwatch 0x地址 — 取消\n/list — 查看在盯的地址\n/feedback 一句话 — 提建议或报问题\n/cheap — 开关便宜矿机提醒\n/threshold 20 — 比自建便宜至少百分之几才提醒\n/daily — 每天收一条全网看板\n/tapeout — TapeOut 生态新活动提醒\n/stop — 关闭全部提醒\n\n从网页订阅请点「用 Telegram 订阅」。只发 /start、链接过期或已经用过，都不会订上。发 /daily 每天收一条全网看板。`,
+    help: '命令：/watch 0x地址、/unwatch 0x地址、/list、/feedback 一句话、/cheap、/threshold 20、/daily、/tapeout、/en、/stop。网站：',
     badAddress: '地址格式不对，应为 0x 开头的 40 位十六进制。例如：/watch 0x1234…',
     watched: (a) => `已开始盯 ${a}。第一次观测只记录基线，之后有收益异动会通知你。`,
     limit: `一个账号最多盯 ${MAX_WATCH_PER_CHAT} 个地址。`,
@@ -70,6 +71,8 @@ const TEXT = {
     thresholdBad: '请发 /threshold 20 这样的整数，范围 1 到 90。20 表示比自建便宜两成及以上才提醒。',
     dailyOn: '每日看板已打开。每天早上 9 点后发一条全网看板。再发一次 /daily 就关掉。',
     dailyOff: '每日看板已关闭。别的提醒照旧。',
+    tapeoutOn: (now) => `TapeOut 雷达提醒已打开。官方账号发出新的可参与活动时推给你，每天最多 ${RADAR_DAILY_CAP} 条。再发一次 /tapeout 就关掉。${now ? `\n\n${now}` : ''}`,
+    tapeoutOff: 'TapeOut 雷达提醒已关闭。别的提醒照旧。',
     alert: {
       revoked: (rows) => rows.map(r => `⚠️ 举证撤销 #${r.rigId}：产出永久归零，不能再开挖`).join('\n'),
       stopped: (rows) => rows.map(r => `⚠️ 停挖 #${r.rigId}：产出归零；冷静期结束后需持有人手动重开`).join('\n'),
@@ -89,8 +92,8 @@ const TEXT = {
     footer: (url) => `查看资产卡：${url}`,
   },
   en: {
-    start: (n) => `Connected. ${n ? `Your Telegram username has ${n} address${n > 1 ? 'es' : ''} signed up on the website; ` : ''}you will be messaged here on rig income changes (revoked, stopped, demoted, NFT transfer, sharp output drop) or FabX PodMining governance events.\n\nCommands:\n/watch 0xaddress — watch an address\n/unwatch 0xaddress — stop watching\n/list — addresses being watched\n/feedback one line — suggest or report\n/cheap — toggle cheap-rig alerts\n/threshold 20 — how much cheaper than building, in percent\n/daily — one network board note each day\n/stop — turn off all alerts\n\nTo subscribe from the website, tap “Subscribe with Telegram”. A plain /start, an expired link, or a used link does not subscribe you. Send /daily to get one network board note each day.`,
-    help: 'Commands: /watch 0xaddress, /unwatch 0xaddress, /list, /feedback one line, /cheap, /threshold 20, /daily, /zh, /stop. Website: ',
+    start: (n) => `Connected. ${n ? `Your Telegram username has ${n} address${n > 1 ? 'es' : ''} signed up on the website; ` : ''}you will be messaged here on rig income changes (revoked, stopped, demoted, NFT transfer, sharp output drop) or FabX PodMining governance events.\n\nCommands:\n/watch 0xaddress — watch an address\n/unwatch 0xaddress — stop watching\n/list — addresses being watched\n/feedback one line — suggest or report\n/cheap — toggle cheap-rig alerts\n/threshold 20 — how much cheaper than building, in percent\n/daily — one network board note each day\n/tapeout — new TapeOut ecosystem activity\n/stop — turn off all alerts\n\nTo subscribe from the website, tap “Subscribe with Telegram”. A plain /start, an expired link, or a used link does not subscribe you. Send /daily to get one network board note each day.`,
+    help: 'Commands: /watch 0xaddress, /unwatch 0xaddress, /list, /feedback one line, /cheap, /threshold 20, /daily, /tapeout, /zh, /stop. Website: ',
     badAddress: 'That is not an address: expected 0x followed by 40 hex characters, e.g. /watch 0x1234…',
     watched: (a) => `Watching ${a}. The first observation only records a baseline; you will be notified on income-relevant changes.`,
     limit: `One account can watch at most ${MAX_WATCH_PER_CHAT} addresses.`,
@@ -123,6 +126,8 @@ const TEXT = {
     thresholdBad: 'Send an integer like /threshold 20, from 1 to 90. 20 means notify when a listing is at least 20% cheaper than building.',
     dailyOn: 'Daily board is on. You get one network board note after 9:00 Beijing time. Send /daily again to turn it off.',
     dailyOff: 'Daily board is off. Your other alerts stay as they are.',
+    tapeoutOn: (now) => `TapeOut radar alerts are on. New open activity from the official accounts is pushed here, at most ${RADAR_DAILY_CAP} a day. Send /tapeout again to turn it off.${now ? `\n\n${now}` : ''}`,
+    tapeoutOff: 'TapeOut radar alerts are off. Your other alerts stay as they are.',
     alert: {
       revoked: (rows) => rows.map(r => `⚠️ Revoked #${r.rigId}: output is permanently zero; cannot restart`).join('\n'),
       stopped: (rows) => rows.map(r => `⚠️ Stopped #${r.rigId}: output zero until the holder manually restarts after cooldown`).join('\n'),
@@ -541,6 +546,18 @@ async function runCheapPass(env, opts, summary, scan) {
   }
 }
 
+async function runRadarPass(env, opts, summary) {
+  if (opts.skipRadar) return;
+  try {
+    const radar = await runRadarAlerts(env, opts);
+    summary.radar = radar;
+    summary.sent += radar.sent || 0;
+    summary.errors.push(...(radar.errors || []));
+  } catch (error) {
+    summary.errors.push(`radar: ${error.message}`);
+  }
+}
+
 async function runDailyPass(env, opts, summary) {
   if (opts.skipDaily) return;
   try {
@@ -560,7 +577,7 @@ export async function runCheck(env, opts = {}) {
   const measure = opts.measure || measureAddress;
   const siteUrl = siteUrlFromEnv(env);
   const limit = opts.limit || MAX_ADDRESSES_PER_RUN;
-  const summary = { addresses: 0, alerts: 0, sent: 0, undeliverable: 0, errors: [], weekly: null, market: null, cheap: null, daily: null };
+  const summary = { addresses: 0, alerts: 0, sent: 0, undeliverable: 0, errors: [], weekly: null, market: null, cheap: null, daily: null, radar: null };
   const retry = await flushDeliveries(db, { scope: 'rig', send, now });
   summary.sent += retry.sent; summary.errors.push(...retry.errors);
   let snap;
@@ -590,6 +607,7 @@ export async function runCheck(env, opts = {}) {
     await runCheapPass(env, { ...opts, send, now }, summary, false);
     await updateBscIndex(db, opts, summary);
     await runDailyPass(env, { ...opts, send, now }, summary);
+    await runRadarPass(env, { ...opts, send, now }, summary);
     return summary;
   }
   if (!opts.skipWeekly) {
@@ -638,6 +656,7 @@ export async function runCheck(env, opts = {}) {
   await runCheapPass(env, { ...opts, send, now }, summary, true);
   await updateBscIndex(db, opts, summary);
   await runDailyPass(env, { ...opts, send, now }, summary);
+  await runRadarPass(env, { ...opts, send, now }, summary);
   return summary;
 }
 
@@ -672,6 +691,33 @@ export async function handleUpdate(update, env, opts = {}) {
   const linkChat = () => db.prepare(`INSERT INTO alert_chats (telegram, chat_id, lang, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(telegram) DO UPDATE SET chat_id = excluded.chat_id, lang = excluded.lang, updated_at = excluded.updated_at`)
     .bind(key, chat.id, lang, stamp, stamp);
+  const setRadar = async (enabled) => {
+    const statements = [
+      linkChat(),
+      db.prepare(`INSERT INTO alert_radar_subs (telegram, enabled, lang, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(telegram) DO UPDATE SET enabled = excluded.enabled, lang = excluded.lang, updated_at = excluded.updated_at`)
+        .bind(key, enabled, lang, stamp, stamp),
+    ];
+    if (!enabled) {
+      statements.push(db.prepare(`UPDATE alert_deliveries SET status = 'cancelled', updated_at = ?, last_error = 'tapeout alerts off'
+        WHERE scope = 'radar' AND subscriber = ? AND status IN ('pending', 'failed')`).bind(stamp, key));
+    }
+    await db.batch(statements);
+    if (!enabled) { await reply(t.tapeoutOff); return; }
+    let now = '';
+    try { now = radarNowText(await loadRadarFeed(opts), lang, Date.parse(stamp)); } catch { now = ''; }
+    await reply(t.tapeoutOn(now));
+  };
+  if (cmd === '/start' && arg.toLowerCase() === 'tapeout') {
+    await setRadar(1);
+    return { handled: true, command: '/tapeout', lang };
+  }
+  if (cmd === '/tapeout') {
+    const row = await db.prepare('SELECT enabled FROM alert_radar_subs WHERE telegram = ?').bind(key).first();
+    await setRadar(row ? (Number(row.enabled) ? 0 : 1) : 1);
+    return { handled: true, command: cmd, lang };
+  }
   if (cmd === '/start') {
     if (arg && !/^(zh|en)$/i.test(arg)) {
       let result;
@@ -813,6 +859,7 @@ ${row.last_checked_at ? `${lang === 'zh' ? '最后检查' : 'Last check'}: ${row
       db.prepare('DELETE FROM alert_signups WHERE telegram = ?').bind(key),
       db.prepare('DELETE FROM alert_cheap_subs WHERE telegram = ?').bind(key),
       db.prepare('DELETE FROM alert_daily_subs WHERE telegram = ?').bind(key),
+      db.prepare('DELETE FROM alert_radar_subs WHERE telegram = ?').bind(key),
       db.prepare(`UPDATE alert_deliveries SET status = 'cancelled', updated_at = ?, last_error = 'unsubscribed'
         WHERE subscriber = ? AND status IN ('pending', 'failed')`).bind(stamp, key),
       db.prepare('DELETE FROM alert_chats WHERE telegram = ?').bind(key),

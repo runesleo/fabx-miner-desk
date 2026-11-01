@@ -216,3 +216,13 @@ CREATE TABLE IF NOT EXISTS alert_daily_subs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- TapeOut radar opt-in (/tapeout, or t.me/<bot>?start=tapeout). Safe to run on a database that already has the other tables.
+-- Sends go through alert_deliveries (scope 'radar', key radar:<chat_id>:<radar item key>); at most 2 per chat per Beijing day.
+CREATE TABLE IF NOT EXISTS alert_radar_subs (
+  telegram   TEXT PRIMARY KEY,        -- same key as alert_chats
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  lang       TEXT NOT NULL,           -- 'zh' or 'en'
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL            -- (re)subscribe time; only items first seen after it are sent
+);

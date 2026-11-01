@@ -12,7 +12,8 @@
 
 ## 你能得到什么
 
-- **TapeOut 生态雷达（首页第一个标签）**：BSC 和 X Layer 上 TapeOut 生态现在能参与的事，取自官方账号近 7 天的帖子，每条附原帖。数据来自 [Leo Labs 机会雷达](https://leolabs.me/radar?theme=tapeout)，经 `/api/radar` 读取。
+- **TapeOut 生态站（首页，非官方）**：今天能参与的活动（见下）、生态地图（各项目官网、X、TG，链接取自项目官方 X 主页并核对，见 `ecosystem.mjs`），以及 FabX 工具。
+- **TapeOut 生态雷达（首页）**：BSC 和 X Layer 上 TapeOut 生态现在能参与的事，取自官方账号近 7 天的帖子，每条附原帖。数据来自 [Leo Labs 机会雷达](https://leolabs.me/radar?theme=tapeout)，经 `/api/radar` 读取。机器人发 `/tapeout`（或点列表下方「Telegram 提醒」）后，有新条目会推送，每天最多 2 条。
 - **入场先比成本**：把新建矿机与官方市场可测挂单放到同一个单位下，比较「每天产出 1 FAB，需要多少 OKB」。
 - **有矿机就看资产卡**：输入地址，查看链上确认持有的矿机、待领取奖励、实测日产与重置成本估值。
 - **把回本假设摊开**：试算 FAB 涨跌、全网权重增长对产出价值的影响，区分静态年化、回本天数与未来情景。

@@ -87,10 +87,10 @@ test('runCheck: baseline run sends nothing; a later stop notifies linked chats o
   const clock = ['2026-10-21T08:00:00.000Z', '2026-10-21T08:30:00.000Z'];
   const now = () => new Date(clock.length > 1 ? clock.shift() : clock[0]);
   const first = await runCheck({ DB: db }, { measure, send, snap: SNAP, now, skipGovernance: true, skipWeekly: true, skipMarket: true, skipBscIndex: true });
-  assert.deepEqual(first, { addresses: 1, alerts: 0, sent: 0, undeliverable: 0, errors: [], weekly: null, market: null, cheap: { subscribers: 0, deals: 0, queued: 0, sent: 0, closed: 0, errors: [] }, daily: { day: '2026-10-21', subscribers: 0, queued: 0, sent: 0, errors: [] } });
+  assert.deepEqual(first, { addresses: 1, alerts: 0, sent: 0, undeliverable: 0, errors: [], weekly: null, market: null, cheap: { subscribers: 0, deals: 0, queued: 0, sent: 0, closed: 0, errors: [] }, daily: { day: '2026-10-21', subscribers: 0, queued: 0, sent: 0, errors: [] }, radar: { subscribers: 0, queued: 0, sent: 0, errors: [] } });
   assert.equal(sent.length, 0);
   const second = await runCheck({ DB: db }, { measure, send, snap: SNAP, now, skipGovernance: true, skipWeekly: true, skipMarket: true, skipBscIndex: true });
-  assert.deepEqual(second, { addresses: 1, alerts: 1, sent: 1, undeliverable: 1, errors: [], weekly: null, market: null, cheap: { subscribers: 0, deals: 0, queued: 0, sent: 0, closed: 0, errors: [] }, daily: { day: '2026-10-21', subscribers: 0, queued: 0, sent: 0, errors: [] } });
+  assert.deepEqual(second, { addresses: 1, alerts: 1, sent: 1, undeliverable: 1, errors: [], weekly: null, market: null, cheap: { subscribers: 0, deals: 0, queued: 0, sent: 0, closed: 0, errors: [] }, daily: { day: '2026-10-21', subscribers: 0, queued: 0, sent: 0, errors: [] }, radar: { subscribers: 0, queued: 0, sent: 0, errors: [] } });
   assert.match(sent[0].text, /停挖/);
   assert.match(sent[0].text, /#1/);
   assert.deepEqual(db.rows('alert_events').map(e => [e.rig_id, e.kind, e.recipients]), [['1', 'stopped', 1]]);

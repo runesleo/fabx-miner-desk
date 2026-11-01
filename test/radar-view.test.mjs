@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { radarCards, radarItems, radarText } from '../radar-view.mjs';
+import { radarCards, radarItems, radarText, cardText } from '../radar-view.mjs';
 import { onRequest, trimItems, UPSTREAM } from '../functions/api/radar.js';
 
 const NOW = Date.parse('2026-11-01T12:00:00Z');
@@ -21,15 +21,18 @@ test('radar keeps open items with safe links, newest first', () => {
 });
 
 test('radar cards escape text, drop t.co links and prefer the Chinese summary in zh', () => {
-  const html = radarCards([item({ name: '<b>Vault</b>', summary_zh: '质押 FAB 挖 BEM' })], 'zh', NOW);
-  assert.ok(html.includes('&lt;b&gt;Vault&lt;/b&gt;'));
+  const html = radarCards([item({ name: '<b>金库</b>', summary_zh: '质押 FAB 挖 BEM' })], 'zh', NOW);
+  assert.ok(html.includes('&lt;b&gt;金库&lt;/b&gt;'));
   assert.ok(html.includes('质押 FAB 挖 BEM'));
+  assert.deepEqual(cardText(item({ name: 'Vault live', summary_zh: '金库上线：质押 FAB 挖 BEM' }), 'zh'), { title: '金库上线', summary: '质押 FAB 挖 BEM' });
+  assert.equal(cardText(item({ name: 'Vault live', summary_zh: '金库上线' }), 'zh').title, '金库上线');
+  assert.equal(cardText(item({ name: 'Vault live', summary_zh: '金库上线' }), 'en').title, 'Vault live');
   assert.ok(html.includes('收益'));
   const en = radarCards([item()], 'en', NOW);
   assert.ok(en.includes('Stake FAB now') && !en.includes('t.co'));
   assert.ok(en.includes('href="https://x.com/Ignixbot/status/1"'));
   assert.equal(radarCards([], 'en', NOW), '');
-  assert.equal(radarText('fr').tabRadar, 'TapeOut radar');
+  assert.equal(radarText('fr').nav.eco, 'Projects');
 });
 
 test('/api/radar passes only public fields through and fails closed', async () => {
@@ -63,4 +66,32 @@ test('fetchRadar turns any failure into the error state', async () => {
   assert.deepEqual(await fetchRadar('/api/radar', async () => new Response(JSON.stringify({ ok: true, items: [1] }))), { status: 'ok', items: [1] });
   assert.equal((await fetchRadar('/api/radar', async () => new Response('x', { status: 502 }))).status, 'error');
   assert.equal((await fetchRadar('/api/radar', async () => { throw new Error('net'); })).status, 'error');
+});
+
+test('radar stats, method filter chips and source handles', async () => {
+  const { radarStats, radarFilters, sourceOf } = await import('../radar-view.mjs');
+  const rows = [
+    item({ key: 'a', method: 'launch', observed_at: '2026-11-01T06:00:00Z', official_url: 'https://x.com/TapeOutCF/status/9' }),
+    item({ key: 'b', method: 'launch', first_seen_at: '2026-10-29T00:00:00Z' }),
+    item({ key: 'c', method: 'claim', first_seen_at: '2026-10-29T00:00:00Z', official_url: 'https://www.fabx.tech/news' }),
+    item({ key: 'd', status: 'ended' }),
+  ];
+  assert.deepEqual(radarStats(rows, NOW), { open: 3, fresh: 1, sources: 3 });
+  const chips = radarFilters(rows, 'zh', 'claim', NOW);
+  assert.match(chips, /data-method="all" aria-pressed="false">全部 <span>3<\/span>/);
+  assert.match(chips, /data-method="launch" aria-pressed="false">新上线 <span>2<\/span>/);
+  assert.match(chips, /data-method="claim" aria-pressed="true">/);
+  assert.equal(radarFilters([item()], 'zh', 'all', NOW), '', 'one method needs no filter');
+  assert.equal((radarCards(rows, 'en', NOW, 'claim').match(/<article/g) || []).length, 1);
+  assert.equal(sourceOf('https://x.com/Fabx_global/status/1'), '@Fabx_global');
+  assert.equal(sourceOf('https://www.fabx.tech/a'), 'fabx.tech');
+  assert.equal(sourceOf('javascript:1'), '');
+});
+
+test('radar cards mark items first seen in the last day and count down deadlines', () => {
+  const html = radarCards([item({ observed_at: '2026-11-01T02:00:00Z', deadline: '2026-11-04T12:00:00Z' })], 'zh', NOW);
+  assert.match(html, /class="radar-new">新</);
+  assert.match(html, /还剩 3 天/);
+  assert.match(html, /@Ignixbot/);
+  assert.doesNotMatch(radarCards([item({ first_seen_at: '2026-11-01T11:00:00Z' })], 'zh', NOW), /radar-new/, 'a backfilled old post is not new');
 });

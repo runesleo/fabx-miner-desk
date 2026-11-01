@@ -12,7 +12,8 @@ Built as an entry in the **X Layer TapeOut Developer Acceleration Program**.
 
 ## What you get
 
-- **TapeOut ecosystem radar (homepage tab)** — what you can join in the TapeOut ecosystem on BSC and X Layer right now: open activity from official accounts over the last 7 days, each with its original post. Items come from the [Leo Labs opportunity radar](https://leolabs.me/radar?theme=tapeout) through `/api/radar`.
+- **TapeOut ecosystem hub (homepage, unofficial)** — open activity (below), an ecosystem map of TapeOut projects with links checked against each project's own X profile (`ecosystem.mjs`), and the FabX tools.
+- **TapeOut ecosystem radar (homepage)** — what you can join in the TapeOut ecosystem on BSC and X Layer right now: open activity from official accounts over the last 7 days, each with its original post. Items come from the [Leo Labs opportunity radar](https://leolabs.me/radar?theme=tapeout) through `/api/radar`. The bot command `/tapeout` (or **Telegram alerts** under the list) pushes new items as they appear, at most 2 a day.
 - **Build or buy** — compare the modeled cost of building 1 FAB/day with measurable official rig listings, in OKB per FAB/day.
 - **Rig asset cards** — inspect an address's confirmed rigs, pending rewards, measured daily output, and replacement-cost estimates.
 - **Payback scenarios** — vary FAB price and network growth, with static gross APR and explicit assumptions.

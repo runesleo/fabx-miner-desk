@@ -11,7 +11,8 @@ import * as paybackModule from '../fabx-payback.mjs';
 import { diagnosisText } from '../fabx-diagnostics.mjs';
 import * as slotDefense from '../slot-defense.mjs';
 import * as crosschainYield from '../crosschain-yield.mjs';
-import { RADAR_MORE, radarCards, radarText } from '../radar-view.mjs';
+import { RADAR_BOT, RADAR_MORE, radarCards, radarFilters, radarStats, radarText } from '../radar-view.mjs';
+import { ECOSYSTEM_CHECKED, PROJECTS, ecosystemCards, ecosystemText, radarCounts } from '../ecosystem.mjs';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const source = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/^import .*;$/gm, '');
@@ -80,7 +81,7 @@ function harness(overrides = {}, saved = {}) {
     loadSlotDefense: async () => ({ state: 'ready', rows: [], rpc: { ethCall: 0, ethGetLogs: 0, maxInFlight: 0 } }),
     loadBemQuote: async () => ({ complete: false, reason: 'over-budget', method: null, priceBnb: null, perDay: null }),
     readOkxLast: async () => null,
-    RADAR_MORE, radarCards, radarText, fetchRadar: async () => ({ status: 'ok', items: [] }),
+    ECOSYSTEM_CHECKED, PROJECTS, ecosystemCards, ecosystemText, radarCounts, RADAR_BOT, RADAR_MORE, radarCards, radarFilters, radarStats, radarText, fetchRadar: async () => ({ status: 'ok', items: [] }),
     ...overrides,
   });
   vm.runInContext(source + '\nglobalThis.ui = { load, lookup, render, addFavorite, switchFavorite, setChain(next) { chain = next === "bsc" ? "bsc" : "fabx"; }, get snap() { return snap; } };', context);
